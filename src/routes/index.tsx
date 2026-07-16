@@ -34,23 +34,25 @@ const featureBranches = [
       { hash: "b1c2d3e", message: "feat(auctasync): scaffold real-time auction platform" },
       { hash: "b4f5g6h", message: "feat(auctasync): implement WebSocket bidding core" },
       { hash: "b7i8j9k", message: "feat(auctasync): integrate SSLCommerz payment gateway" },
-      { hash: "b0l1m2n", message: "feat(auctasync): [PLACEHOLDER] production deployment and load validation" },
+      { hash: "b0l1m2n", message: "feat(auctasync): production deployment and load validation for concurrent bidding" },
     ],
   },
   {
     name: "feat/careerpilot",
     commits: [
-      { hash: "c1d2e3f", message: "feat(careerpilot): [PLACEHOLDER] define project scope and tech stack" },
-      { hash: "c4g5h6i", message: "feat(careerpilot): [PLACEHOLDER] implement core feature" },
-      { hash: "c7j8k9l", message: "feat(careerpilot): [PLACEHOLDER] milestone" },
+      { hash: "c1d2e3f", message: "feat(careerpilot): scaffold career roadmap generator, define user input flow" },
+      { hash: "c4g5h6i", message: "feat(careerpilot): integrate LLM API for personalized roadmap generation" },
+      { hash: "c7h8i9j", message: "feat(careerpilot): build voice-based mock interview pipeline" },
+      { hash: "c7j8k9l", message: "feat(careerpilot): milestone — end-to-end roadmap + voice interview flow shipped" },
     ],
   },
   {
     name: "feat/assetverse",
     commits: [
-      { hash: "d1e2f3g", message: "feat(assetverse): [PLACEHOLDER] define project scope and tech stack" },
-      { hash: "d4h5i6j", message: "feat(assetverse): [PLACEHOLDER] implement core feature" },
-      { hash: "d7k8l9m", message: "feat(assetverse): [PLACEHOLDER] milestone" },
+      { hash: "d1e2f3g", message: "feat(assetverse): scaffold role-based asset management system" },
+      { hash: "d4g5h6i", message: "feat(assetverse): implement RBAC with role hierarchy and permission checks" },
+      { hash: "d7h8i9j", message: "feat(assetverse): build audit trail logging every asset state change" },
+      { hash: "d7k8l9m", message: "feat(assetverse): milestone — full audit trail across asset lifecycle shipped" },
     ],
   },
 ];
@@ -90,7 +92,7 @@ function Index() {
               {branch.commits.map((commit) => (
                 <li key={commit.hash} className="flex gap-4">
                   <span className="shrink-0 text-gray-500">{commit.hash}</span>
-                  <span className={commit.message.includes("[PLACEHOLDER]") ? "text-gray-400" : ""}>
+                  <span>
                     {commit.message}
                   </span>
                 </li>
