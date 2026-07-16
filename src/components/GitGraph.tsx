@@ -213,7 +213,7 @@ export function GitGraph() {
         ))}
       </svg>
 
-      {/* Message labels — HTML overlay for natural truncation */}
+      {/* Message labels — HTML overlay; wrap rather than truncate */}
       <div className="absolute inset-y-0 right-0" style={{ left: GRAPH_W }}>
         {allNodes.map((n) => (
           <motion.div
@@ -221,29 +221,29 @@ export function GitGraph() {
             initial={{ opacity: 0, x: -8 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.35, ease: "easeOut", delay: n.revealAt + 0.05 }}
-            className="absolute flex items-center gap-3 pr-4"
-            style={{ top: n.y - 12, left: 12, right: 0, height: 24 }}
+            className="absolute flex items-start gap-3 pr-2"
+            style={{ top: n.y, left: 8, right: 0, transform: "translateY(-50%)" }}
           >
             <span
-              className="shrink-0 tabular-nums"
+              className="shrink-0 tabular-nums pt-[2px]"
               style={{ color: n.isHead ? "#34d399" : "#6b7280", fontSize: 12 }}
             >
               {n.hash}
             </span>
             <span
-              className="truncate"
+              className="leading-snug break-words"
               style={{
-                color: n.isHead ? "#34d399" : n.isMain ? "#e5e7eb" : n.color,
+                color: n.isHead ? "#34d399" : n.isMain ? "#ffffff" : n.color,
                 fontSize: 13,
-                opacity: n.isMain || n.isHead ? 1 : 0.92,
+                fontWeight: n.isMain || n.isHead ? 500 : 400,
               }}
-              title={n.message}
             >
               {n.message}
             </span>
           </motion.div>
         ))}
       </div>
+
     </div>
   );
 }
