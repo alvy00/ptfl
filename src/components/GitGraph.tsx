@@ -1,25 +1,27 @@
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { CommitModal, type CommitSelection } from "./CommitModal";
+import type { ProjectKey } from "@/data/projects";
 
 type Commit = { hash: string; message: string };
-
 type MainCommit = Commit & { row: number };
 
 type Branch = {
   name: string;
+  projectKey: ProjectKey;
   color: string;
-  lane: number; // 1-based lane index (0 = main)
-  sourceY: number; // y where the branch forks off main
-  mergeY: number; // y where the branch merges back into main
+  lane: number;
+  sourceY: number;
+  mergeY: number;
   commits: (Commit & { row: number })[];
-  delay: number; // animation stagger
+  delay: number;
 };
 
 const ROW_H = 56;
 const TOP_PAD = 48;
 const MAIN_X = 28;
 const LANE_W = 40;
-const GRAPH_W = MAIN_X + LANE_W * 5; // room for 4 branches + 1 future lane
-
+const GRAPH_W = MAIN_X + LANE_W * 5; // 4 branches + 1 future lane
 
 const yOf = (row: number) => TOP_PAD + row * ROW_H;
 const laneX = (lane: number) => MAIN_X + lane * LANE_W;
@@ -34,6 +36,7 @@ const mainCommits: MainCommit[] = [
 const branches: Branch[] = [
   {
     name: "feat/auctasync",
+    projectKey: "auctasync",
     color: "#f59e0b",
     lane: 1,
     sourceY: yOf(1) + 22,
@@ -48,6 +51,7 @@ const branches: Branch[] = [
   },
   {
     name: "feat/assetverse",
+    projectKey: "assetverse",
     color: "#a78bfa",
     lane: 2,
     sourceY: yOf(6) + 22,
@@ -62,6 +66,7 @@ const branches: Branch[] = [
   },
   {
     name: "feat/careerpilot",
+    projectKey: "careerpilot",
     color: "#34d399",
     lane: 3,
     sourceY: yOf(11) - 28,
@@ -93,23 +98,31 @@ function branchPath(b: Branch): string {
   ].join(" ");
 }
 
+type NodeMeta = {
+  x: number;
+  y: number;
+  hash: string;
+  message: string;
+  color: string;
+  isHead?: boolean;
+  isMain?: boolean;
+  revealAt: number;
+  projectKey?: ProjectKey;
+  commitIndex?: number;
+  commitTotal?: number;
+};
+
 export function GitGraph() {
-  const allNodes: {
-    x: number;
-    y: number;
-    hash: string;
-    message: string;
-    color: string;
-    isHead?: boolean;
-    isMain?: boolean;
-    revealAt: number;
-  }[] = [
+  const [hovered, setHovered] = useState<string | null>(null);
+  const [selection, setSelection] = useState<CommitSelection | null>(null);
+
+  const allNodes: NodeMeta[] = [
     ...mainCommits.map((c, i) => ({
       x: MAIN_X,
       y: yOf(c.row),
       hash: c.hash,
       message: c.message,
-      color: "#e5e7eb",
+      color: "#ffffff",
       isHead: c.hash === "HEAD",
       isMain: true,
       revealAt: 0.15 + i * 0.15,
@@ -122,128 +135,184 @@ export function GitGraph() {
         message: c.message,
         color: b.color,
         revealAt: b.delay + 0.2 + i * 0.18,
+        projectKey: b.projectKey,
+        commitIndex: i,
+        commitTotal: b.commits.length,
       })),
     ),
   ];
 
+  const openCommit = (n: NodeMeta, evt?: React.MouseEvent) => {
+    if (n.isMain) {
+      const rect = (evt?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect();
+      setSelection({
+        kind: "main",
+        hash: n.hash,
+        message: n.message,
+        anchorX: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
+        anchorY: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
+      });
+    } else if (n.projectKey) {
+      setSelection({
+        kind: "feature",
+        hash: n.hash,
+        message: n.message,
+        projectKey: n.projectKey,
+        commitIndex: n.commitIndex ?? 0,
+        commitTotal: n.commitTotal ?? 1,
+      });
+    }
+  };
+
   return (
-    <div
-      className="relative w-full"
-      style={{ height: HEIGHT }}
-    >
-      {/* SVG graph layer */}
-      <svg
-        className="absolute inset-y-0 left-0"
-        width={GRAPH_W}
-        height={HEIGHT}
-        viewBox={`0 0 ${GRAPH_W} ${HEIGHT}`}
-        style={{ overflow: "visible" }}
-        aria-hidden="true"
-      >
-        <defs>
-          <filter id="head-glow" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
+    <>
+      <div className="relative w-full" style={{ height: HEIGHT }}>
+        {/* SVG graph */}
+        <svg
+          className="pointer-events-none absolute inset-y-0 left-0"
+          width={GRAPH_W}
+          height={HEIGHT}
+          viewBox={`0 0 ${GRAPH_W} ${HEIGHT}`}
+          style={{ overflow: "visible" }}
+          aria-hidden="true"
+        >
+          <defs>
+            <filter id="head-glow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
 
-        {/* main spine — draws first, thickest + brightest so it reads as the timeline */}
-        <motion.line
-          x1={MAIN_X}
-          y1={yOf(0)}
-          x2={MAIN_X}
-          y2={yOf(15)}
-          stroke="#ffffff"
-          strokeWidth={4}
-          strokeLinecap="round"
-          initial={{ pathLength: 0, opacity: 0.4 }}
-          animate={{ pathLength: 1, opacity: 1 }}
-          transition={{ duration: 0.9, ease: "easeInOut" }}
-        />
-
-
-        {/* branches */}
-        {branches.map((b) => (
-          <motion.path
-            key={b.name}
-            d={branchPath(b)}
-            fill="none"
-            stroke={b.color}
-            strokeWidth={2}
+          {/* main spine */}
+          <motion.line
+            x1={MAIN_X}
+            y1={yOf(0)}
+            x2={MAIN_X}
+            y2={yOf(15)}
+            stroke="#ffffff"
+            strokeWidth={4}
             strokeLinecap="round"
-            initial={{ pathLength: 0, opacity: 0.5 }}
-            animate={{ pathLength: 1, opacity: 0.9 }}
-            transition={{ duration: 0.9, ease: "easeInOut", delay: b.delay }}
+            initial={{ pathLength: 0, opacity: 0.4 }}
+            animate={{ pathLength: 1, opacity: 1 }}
+            transition={{ duration: 0.9, ease: "easeInOut" }}
           />
-        ))}
 
-        {/* nodes */}
-        {allNodes.map((n) => (
-          <motion.g
-            key={n.hash}
-            initial={{ opacity: 0, scale: 0.4 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.35, ease: "easeOut", delay: n.revealAt }}
-            style={{ transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" as const }}
-          >
-            {n.isHead && (
-              <motion.circle
-                cx={n.x}
-                cy={n.y}
-                r={12}
-                fill="#34d399"
-                opacity={0.35}
-                animate={{ r: [12, 20, 12], opacity: [0.45, 0.05, 0.45] }}
-                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-              />
-            )}
-            <circle
-              cx={n.x}
-              cy={n.y}
-              r={n.isHead ? 7 : n.isMain ? 6 : 5}
-              fill="#0b0c10"
-              stroke={n.isHead ? "#34d399" : n.color}
-              strokeWidth={n.isHead ? 2.5 : 2}
-              filter={n.isHead ? "url(#head-glow)" : undefined}
+          {/* branches */}
+          {branches.map((b) => (
+            <motion.path
+              key={b.name}
+              d={branchPath(b)}
+              fill="none"
+              stroke={b.color}
+              strokeWidth={2}
+              strokeLinecap="round"
+              initial={{ pathLength: 0, opacity: 0.5 }}
+              animate={{ pathLength: 1, opacity: 0.9 }}
+              transition={{ duration: 0.9, ease: "easeInOut", delay: b.delay }}
             />
-          </motion.g>
-        ))}
-      </svg>
+          ))}
 
-      {/* Message labels — HTML overlay; wrap rather than truncate */}
-      <div className="absolute inset-y-0 right-0" style={{ left: GRAPH_W }}>
-        {allNodes.map((n) => (
-          <motion.div
-            key={n.hash}
-            initial={{ opacity: 0, x: -8 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.35, ease: "easeOut", delay: n.revealAt + 0.05 }}
-            className="absolute flex items-start gap-3 pr-2"
-            style={{ top: n.y, left: 8, right: 0, transform: "translateY(-50%)" }}
-          >
-            <span
-              className="shrink-0 tabular-nums pt-[2px]"
-              style={{ color: n.isHead ? "#34d399" : "#6b7280", fontSize: 12 }}
-            >
-              {n.hash}
-            </span>
-            <span
-              className="leading-snug break-words"
-              style={{
-                color: n.isHead ? "#34d399" : n.isMain ? "#ffffff" : n.color,
-                fontSize: 13,
-                fontWeight: n.isMain || n.isHead ? 500 : 400,
-              }}
-            >
-              {n.message}
-            </span>
-          </motion.div>
-        ))}
+          {/* nodes (visual only; interactive hitboxes are in HTML overlay) */}
+          {allNodes.map((n) => {
+            const isHovered = hovered === n.hash;
+            const baseR = n.isHead ? 7 : n.isMain ? 6 : 5;
+            return (
+              <motion.g
+                key={n.hash}
+                initial={{ opacity: 0, scale: 0.4 }}
+                animate={{ opacity: 1, scale: isHovered ? 1.25 : 1 }}
+                transition={{ duration: 0.35, ease: "easeOut", delay: isHovered ? 0 : n.revealAt }}
+                style={{ transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" as const }}
+              >
+                {n.isHead && (
+                  <motion.circle
+                    cx={n.x}
+                    cy={n.y}
+                    r={12}
+                    fill="#34d399"
+                    opacity={0.35}
+                    animate={{ r: [12, 20, 12], opacity: [0.45, 0.05, 0.45] }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  />
+                )}
+                {isHovered && !n.isHead && (
+                  <circle
+                    cx={n.x}
+                    cy={n.y}
+                    r={baseR + 6}
+                    fill={n.color}
+                    opacity={0.25}
+                    style={{ filter: `drop-shadow(0 0 8px ${n.color})` }}
+                  />
+                )}
+                <circle
+                  cx={n.x}
+                  cy={n.y}
+                  r={baseR}
+                  fill="#0b0c10"
+                  stroke={n.isHead ? "#34d399" : n.color}
+                  strokeWidth={n.isHead ? 2.5 : 2}
+                  filter={n.isHead ? "url(#head-glow)" : undefined}
+                />
+              </motion.g>
+            );
+          })}
+        </svg>
+
+        {/* Interactive overlay: row = hitbox for node + label */}
+        <div className="absolute inset-0">
+          {allNodes.map((n) => {
+            const isHovered = hovered === n.hash;
+            return (
+              <motion.button
+                key={n.hash}
+                type="button"
+                onClick={(e) => openCommit(n, e)}
+                onMouseEnter={() => setHovered(n.hash)}
+                onMouseLeave={() => setHovered((h) => (h === n.hash ? null : h))}
+                onFocus={() => setHovered(n.hash)}
+                onBlur={() => setHovered((h) => (h === n.hash ? null : h))}
+                title={n.message}
+                aria-label={`${n.hash} ${n.message}`}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.35, ease: "easeOut", delay: n.revealAt + 0.05 }}
+                className="absolute flex items-start gap-3 rounded-md px-1 py-0.5 text-left transition-colors"
+                style={{
+                  top: n.y,
+                  left: GRAPH_W + 8,
+                  right: 0,
+                  transform: "translateY(-50%)",
+                  background: isHovered ? "rgba(255,255,255,0.04)" : "transparent",
+                }}
+              >
+                <span
+                  className="shrink-0 tabular-nums pt-[2px]"
+                  style={{ color: n.isHead ? "#34d399" : "#6b7280", fontSize: 12 }}
+                >
+                  {n.hash}
+                </span>
+                <span
+                  className="leading-snug break-words"
+                  style={{
+                    color: n.isHead ? "#34d399" : n.isMain ? "#ffffff" : n.color,
+                    fontSize: 13,
+                    fontWeight: n.isMain || n.isHead ? 500 : 400,
+                    textShadow: isHovered ? `0 0 12px ${n.color}66` : "none",
+                  }}
+                >
+                  {n.message}
+                </span>
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
 
-    </div>
+      <CommitModal selection={selection} onClose={() => setSelection(null)} />
+    </>
   );
 }
