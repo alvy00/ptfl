@@ -150,19 +150,20 @@ export function GitGraph() {
           </filter>
         </defs>
 
-        {/* main spine — draws first, thicker + brighter */}
+        {/* main spine — draws first, thickest + brightest so it reads as the timeline */}
         <motion.line
           x1={MAIN_X}
           y1={yOf(0)}
           x2={MAIN_X}
           y2={yOf(15)}
-          stroke="#e5e7eb"
-          strokeWidth={3}
+          stroke="#ffffff"
+          strokeWidth={4}
           strokeLinecap="round"
           initial={{ pathLength: 0, opacity: 0.4 }}
           animate={{ pathLength: 1, opacity: 1 }}
           transition={{ duration: 0.9, ease: "easeInOut" }}
         />
+
 
         {/* branches */}
         {branches.map((b) => (
