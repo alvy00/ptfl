@@ -16,9 +16,10 @@ type Branch = {
 
 const ROW_H = 56;
 const TOP_PAD = 48;
-const MAIN_X = 44;
-const LANE_W = 56;
+const MAIN_X = 28;
+const LANE_W = 40;
 const GRAPH_W = MAIN_X + LANE_W * 5; // room for 4 branches + 1 future lane
+
 
 const yOf = (row: number) => TOP_PAD + row * ROW_H;
 const laneX = (lane: number) => MAIN_X + lane * LANE_W;
