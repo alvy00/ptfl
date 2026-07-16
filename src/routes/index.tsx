@@ -92,7 +92,7 @@ function Index() {
               {branch.commits.map((commit) => (
                 <li key={commit.hash} className="flex gap-4">
                   <span className="shrink-0 text-gray-500">{commit.hash}</span>
-                  <span className={commit.message.includes("[PLACEHOLDER]") ? "text-gray-400" : ""}>
+                  <span>
                     {commit.message}
                   </span>
                 </li>
