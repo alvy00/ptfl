@@ -405,6 +405,36 @@ function MainPopover({
   onClose: () => void;
 }) {
   return (
+    <SimplePopover
+      hash={selection.hash}
+      message={selection.message}
+      color="#ffffff"
+      label="main"
+      anchorX={selection.anchorX}
+      anchorY={selection.anchorY}
+      onClose={onClose}
+    />
+  );
+}
+
+function SimplePopover({
+  hash,
+  message,
+  color,
+  label,
+  anchorX,
+  anchorY,
+  onClose,
+}: {
+  hash: string;
+  message: string;
+  color: string;
+  label: string;
+  anchorX: number;
+  anchorY: number;
+  onClose: () => void;
+}) {
+  return (
     <>
       <motion.button
         aria-label="Close"
@@ -420,8 +450,8 @@ function MainPopover({
         aria-modal="true"
         className="fixed z-50 font-mono"
         style={{
-          left: Math.min(selection.anchorX + 20, typeof window !== "undefined" ? window.innerWidth - 300 : 400),
-          top: selection.anchorY - 20,
+          left: Math.min(anchorX + 20, typeof window !== "undefined" ? window.innerWidth - 300 : 400),
+          top: anchorY - 20,
         }}
         initial={{ opacity: 0, y: 6, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -433,19 +463,20 @@ function MainPopover({
           style={{
             background: "rgba(20, 22, 30, 0.85)",
             backdropFilter: "blur(18px) saturate(160%)",
-            border: "1px solid rgba(255,255,255,0.12)",
+            border: `1px solid ${color}33`,
             boxShadow: "0 20px 50px rgba(0,0,0,0.55)",
           }}
         >
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-widest text-gray-400">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-white" />
-            main
+            <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: color }} />
+            {label}
             <span className="text-gray-600">·</span>
-            <span className="tabular-nums">{selection.hash}</span>
+            <span className="tabular-nums">{hash}</span>
           </div>
-          <p className="mt-2 text-[13px] leading-snug text-white">{selection.message}</p>
+          <p className="mt-2 text-[13px] leading-snug text-white">{message}</p>
         </div>
       </motion.div>
     </>
   );
 }
+
