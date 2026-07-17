@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect } from "react";
 import { commitDateFor, projects, relativeTime, type Project, type ProjectKey } from "@/data/projects";
+import { bugfixes, type BugfixKey } from "@/data/bugfixes";
 import { AskProject } from "./AskProject";
 
 
@@ -13,7 +14,16 @@ export type CommitSelection =
       commitIndex: number;
       commitTotal: number;
     }
-  | { kind: "main"; hash: string; message: string; anchorX: number; anchorY: number };
+  | { kind: "main"; hash: string; message: string; anchorX: number; anchorY: number }
+  | { kind: "bugfix"; hash: string; message: string; bugfixKey: BugfixKey }
+  | {
+      kind: "bugfix-first";
+      hash: string;
+      message: string;
+      color: string;
+      anchorX: number;
+      anchorY: number;
+    };
 
 type Props = {
   selection: CommitSelection | null;
@@ -38,7 +48,176 @@ export function CommitModal({ selection, onClose }: Props) {
       {selection?.kind === "main" && (
         <MainPopover selection={selection} onClose={onClose} />
       )}
+      {selection?.kind === "bugfix" && (
+        <BugfixModal selection={selection} onClose={onClose} />
+      )}
+      {selection?.kind === "bugfix-first" && (
+        <SimplePopover
+          hash={selection.hash}
+          message={selection.message}
+          color={selection.color}
+          label="bugfix"
+          anchorX={selection.anchorX}
+          anchorY={selection.anchorY}
+          onClose={onClose}
+        />
+      )}
     </AnimatePresence>
+  );
+}
+
+function BugfixModal({
+  selection,
+  onClose,
+}: {
+  selection: Extract<CommitSelection, { kind: "bugfix" }>;
+  onClose: () => void;
+}) {
+  const bug = bugfixes[selection.bugfixKey];
+  const accent = bug.accent;
+  return (
+    <motion.div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+    >
+      <button
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute inset-0 cursor-default"
+        style={{
+          background: "rgba(6, 8, 14, 0.72)",
+          backdropFilter: "blur(14px) saturate(140%)",
+        }}
+      />
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        className="relative w-full max-w-xl overflow-hidden rounded-2xl font-mono"
+        initial={{ opacity: 0, y: 16, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 12, scale: 0.98 }}
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+        style={{
+          background: "rgba(20, 22, 30, 0.78)",
+          backdropFilter: "blur(24px) saturate(160%)",
+          border: `1px solid ${accent}33`,
+          boxShadow: `0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px ${accent}22`,
+        }}
+      >
+        <div className="max-h-[85vh] overflow-y-auto">
+          {/* PR-style header */}
+          <div
+            className="flex items-center gap-3 border-b px-6 py-3 text-[11px] uppercase tracking-widest"
+            style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}
+          >
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium"
+              style={{
+                background: "rgba(139, 92, 246, 0.15)",
+                color: "#c4b5fd",
+                border: "1px solid rgba(139,92,246,0.35)",
+              }}
+            >
+              <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#c4b5fd" }} />
+              Merged
+            </span>
+            <span className="text-gray-500">pull request</span>
+            <span className="ml-auto tabular-nums text-gray-500">{selection.hash}</span>
+          </div>
+
+          <div className="p-6 sm:p-7">
+            <div className="mb-1 flex items-center gap-2 text-[11px] text-gray-500">
+              <span style={{ color: accent }}>{bug.branch}</span>
+              <span>→</span>
+              <span>{bug.parentLabel}</span>
+            </div>
+            <h3 className="text-lg font-semibold text-white">{bug.title}</h3>
+            <p className="mt-2 text-[12px] text-gray-500">{selection.message}</p>
+
+            <div className="mt-6 space-y-5 font-sans text-[13px] leading-relaxed">
+              <PRSection label="Problem" body={bug.problem} />
+              <PRSection
+                label="What I Tried First"
+                body={bug.triedFirst}
+                tint="red"
+              />
+              <PRSection label="Root Cause" body={bug.rootCause} />
+              <PRSection label="The Fix" body={bug.fix} tint="green" />
+              <PRSection
+                label="What I'd Do Differently"
+                body={bug.wouldDoDifferently}
+              />
+            </div>
+          </div>
+        </div>
+
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-white/5 hover:text-white"
+        >
+          esc ✕
+        </button>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function PRSection({
+  label,
+  body,
+  tint,
+}: {
+  label: string;
+  body: string;
+  tint?: "red" | "green";
+}) {
+  const marker = tint === "red" ? "-" : tint === "green" ? "+" : null;
+  const tintBg =
+    tint === "red"
+      ? "rgba(239, 68, 68, 0.08)"
+      : tint === "green"
+      ? "rgba(34, 197, 94, 0.08)"
+      : "rgba(255,255,255,0.02)";
+  const tintBorder =
+    tint === "red"
+      ? "rgba(239, 68, 68, 0.35)"
+      : tint === "green"
+      ? "rgba(34, 197, 94, 0.35)"
+      : "rgba(255,255,255,0.08)";
+  const markerColor = tint === "red" ? "#f87171" : tint === "green" ? "#4ade80" : undefined;
+
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-2 font-mono text-[11px] uppercase tracking-widest text-gray-400">
+        {marker && (
+          <span
+            className="inline-flex h-4 w-4 items-center justify-center rounded-sm font-mono text-[11px] font-bold"
+            style={{
+              background: tintBg,
+              color: markerColor,
+              border: `1px solid ${tintBorder}`,
+            }}
+            aria-hidden="true"
+          >
+            {marker}
+          </span>
+        )}
+        {label}
+      </div>
+      <div
+        className="rounded-md border-l-2 py-2 pl-3 pr-3 text-gray-300"
+        style={{
+          borderColor: tintBorder,
+          background: tintBg,
+        }}
+      >
+        {body}
+      </div>
+    </div>
   );
 }
 
