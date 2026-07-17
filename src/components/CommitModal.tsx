@@ -1,6 +1,8 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect } from "react";
 import { commitDateFor, projects, relativeTime, type Project, type ProjectKey } from "@/data/projects";
+import { AskProject } from "./AskProject";
+
 
 export type CommitSelection =
   | {
@@ -197,7 +199,11 @@ function FeatureModal({
               </a>
             ))}
           </div>
+
+          {/* AI Ask (mock) */}
+          <AskProject projectKey={selection.projectKey} accent={accent} />
         </div>
+
 
         {/* Close */}
         <button
