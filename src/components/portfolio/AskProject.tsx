@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, useEffect } from "react";
 import { getAIResponse } from "@/lib/portfolio/ask-project.mock";
 import type { ProjectKey } from "@/data/portfolio/projects";
 
@@ -17,12 +17,24 @@ export function AskProject({ projectKey, accent }: Props) {
 
   const disabled = status !== "idle";
 
+  useEffect(() => {
+    if (status !== "cooldown") return;
+
+    const timer = setTimeout(() => {
+      setStatus("idle");
+    }, COOLDOWN_MS);
+
+    return () => clearTimeout(timer);
+  }, [status]);
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const q = question.trim();
     if (!q || disabled) return;
+
     setStatus("thinking");
     setAnswer(null);
+
     try {
       const res = await getAIResponse(projectKey, q);
       setAnswer(res);
@@ -30,7 +42,6 @@ export function AskProject({ projectKey, accent }: Props) {
       setAnswer("[error] request failed. try again.");
     } finally {
       setStatus("cooldown");
-      setTimeout(() => setStatus("idle"), COOLDOWN_MS);
     }
   }
 
@@ -87,30 +98,32 @@ export function AskProject({ projectKey, accent }: Props) {
         </button>
       </form>
 
-      {(status === "thinking" || answer) && (
-        <div
-          className="mt-2 rounded-md border px-3 py-2 text-[12.5px] leading-relaxed"
-          style={{
-            borderColor: `${accent}33`,
-            background: "rgba(0,0,0,0.3)",
-            color: accent,
-          }}
-        >
-          {status === "thinking" ? (
-            <span className="text-gray-400">
-              <span style={{ color: accent }}>›</span> thinking
-              <span aria-hidden style={{ animation: "ask-blink 1s steps(2, start) infinite" }}>
-                ...
+      <div aria-live="polite" aria-atomic="true" className="empty:hidden">
+        {(status === "thinking" || answer) && (
+          <div
+            className="mt-2 rounded-md border px-3 py-2 text-[12.5px] leading-relaxed"
+            style={{
+              borderColor: `${accent}33`,
+              background: "rgba(0,0,0,0.3)",
+              color: accent,
+            }}
+          >
+            {status === "thinking" ? (
+              <span className="text-gray-400">
+                <span style={{ color: accent }}>›</span> thinking
+                <span aria-hidden style={{ animation: "ask-blink 1s steps(2, start) infinite" }}>
+                  ...
+                </span>
               </span>
-            </span>
-          ) : (
-            <>
-              <span className="text-gray-500">› </span>
-              <span style={{ color: accent }}>{answer}</span>
-            </>
-          )}
-        </div>
-      )}
+            ) : (
+              <>
+                <span className="text-gray-500">› </span>
+                <span style={{ color: accent }}>{answer}</span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       <style>{`
         @keyframes ask-blink {

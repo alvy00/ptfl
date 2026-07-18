@@ -1,6 +1,6 @@
 /* eslint-disable prettier/prettier */
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useId } from "react";
 import {
   commitDateFor,
   projects,
@@ -75,6 +75,8 @@ function BugfixModal({
 }) {
   const bug = bugfixes[selection.bugfixKey];
   const accent = bug.accent;
+  const titleId = useId();
+
   return (
     <motion.div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
@@ -84,7 +86,7 @@ function BugfixModal({
       transition={{ duration: 0.2 }}
     >
       <button
-        aria-label="Close"
+        aria-label="Close modal overlay"
         onClick={onClose}
         className="absolute inset-0 cursor-default"
         style={{
@@ -95,6 +97,7 @@ function BugfixModal({
       <motion.div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         className="relative w-full max-w-xl overflow-hidden rounded-2xl font-mono"
         initial={{ opacity: 0, y: 16, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -108,7 +111,6 @@ function BugfixModal({
         }}
       >
         <div className="max-h-[85vh] overflow-y-auto">
-          {/* PR-style header */}
           <div
             className="flex items-center gap-3 border-b px-6 py-3 text-[11px] uppercase tracking-widest"
             style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}
@@ -137,7 +139,9 @@ function BugfixModal({
               <span>→</span>
               <span>{bug.parentLabel}</span>
             </div>
-            <h3 className="text-lg font-semibold text-white">{bug.title}</h3>
+            <h3 id={titleId} className="text-lg font-semibold text-white">
+              {bug.title}
+            </h3>
             <p className="mt-2 text-[12px] text-gray-500">{selection.message}</p>
 
             <div className="mt-6 space-y-5 font-sans text-[13px] leading-relaxed">
@@ -152,7 +156,7 @@ function BugfixModal({
 
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label="Close dialog"
           className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-white/5 hover:text-white"
         >
           esc ✕
@@ -225,6 +229,7 @@ function FeatureModal({
     day: "numeric",
   });
   const accent = project.accent;
+  const titleId = useId();
 
   return (
     <motion.div
@@ -234,9 +239,8 @@ function FeatureModal({
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
     >
-      {/* Backdrop */}
       <button
-        aria-label="Close"
+        aria-label="Close modal overlay"
         onClick={onClose}
         className="absolute inset-0 cursor-default"
         style={{
@@ -244,10 +248,10 @@ function FeatureModal({
           backdropFilter: "blur(14px) saturate(140%)",
         }}
       />
-      {/* Panel */}
       <motion.div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         className="relative w-full max-w-xl overflow-hidden rounded-2xl font-mono"
         initial={{ opacity: 0, y: 16, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -261,7 +265,6 @@ function FeatureModal({
         }}
       >
         <div className="max-h-[85vh] overflow-y-auto p-6 sm:p-7">
-          {/* Commit header */}
           <div
             className="mb-5 rounded-lg border p-4"
             style={{
@@ -286,15 +289,15 @@ function FeatureModal({
             </p>
           </div>
 
-          {/* Project */}
           <div className="mb-1 text-[11px] uppercase tracking-widest text-gray-500">project</div>
-          <h3 className="text-lg font-semibold text-white">{project.name}</h3>
+          <h3 id={titleId} className="text-lg font-semibold text-white">
+            {project.name}
+          </h3>
           <p className="mt-1 text-xs text-gray-400">{project.timeframe.label}</p>
           <p className="mt-3 text-[13px] leading-relaxed text-gray-300 font-sans">
             {project.description}
           </p>
 
-          {/* Features */}
           <div className="mt-5">
             <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">
               key features
@@ -315,7 +318,6 @@ function FeatureModal({
             </ul>
           </div>
 
-          {/* Stack */}
           <div className="mt-5">
             <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">stack</div>
             <div className="flex flex-wrap gap-2">
@@ -335,7 +337,6 @@ function FeatureModal({
             </div>
           </div>
 
-          {/* Links */}
           <div className="mt-6 flex flex-wrap items-center gap-2">
             <a
               href={project.demoUrl}
@@ -367,14 +368,12 @@ function FeatureModal({
             ))}
           </div>
 
-          {/* AI Ask (mock) */}
           <AskProject projectKey={selection.projectKey} accent={accent} />
         </div>
 
-        {/* Close */}
         <button
           onClick={onClose}
-          aria-label="Close"
+          aria-label="Close dialog"
           className="absolute right-3 top-3 rounded-md px-2 py-1 text-xs text-gray-400 hover:bg-white/5 hover:text-white"
         >
           esc ✕
@@ -421,10 +420,12 @@ function SimplePopover({
   anchorY: number;
   onClose: () => void;
 }) {
+  const titleId = useId();
+
   return (
     <>
       <motion.button
-        aria-label="Close"
+        aria-label="Close popover overlay"
         onClick={onClose}
         className="fixed inset-0 z-40 cursor-default"
         initial={{ opacity: 0 }}
@@ -435,12 +436,13 @@ function SimplePopover({
       <motion.div
         role="dialog"
         aria-modal="true"
+        aria-labelledby={titleId}
         className="fixed z-50 font-mono"
         style={{
-          left: Math.min(
-            anchorX + 20,
-            typeof window !== "undefined" ? window.innerWidth - 300 : 400,
-          ),
+          left:
+            typeof window !== "undefined"
+              ? Math.min(anchorX + 20, window.innerWidth - 300)
+              : anchorX + 20,
           top: anchorY - 20,
         }}
         initial={{ opacity: 0, y: 6, scale: 0.96 }}
@@ -463,7 +465,9 @@ function SimplePopover({
             <span className="text-gray-600">·</span>
             <span className="tabular-nums">{hash}</span>
           </div>
-          <p className="mt-2 text-[13px] leading-snug text-white">{message}</p>
+          <p id={titleId} className="mt-2 text-[13px] leading-snug text-white">
+            {message}
+          </p>
         </div>
       </motion.div>
     </>

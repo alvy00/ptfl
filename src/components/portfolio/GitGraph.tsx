@@ -5,6 +5,14 @@ import { useEffect, useState } from "react";
 import { CommitModal, type CommitSelection } from "./CommitModal";
 import type { ProjectKey } from "@/data/portfolio/projects";
 import { bugfixes, type BugfixKey } from "@/data/portfolio/bugfixes";
+import {
+  mainCommitContent,
+  auctasyncCommitContent,
+  assetverseCommitContent,
+  careerpilotCommitContent,
+  auctasyncBugfixCommitContent,
+  careerpilotBugfixCommitContent,
+} from "@/data/portfolio/commits";
 
 type Commit = { hash: string; message: string };
 type MainCommit = Commit & { row: number };
@@ -42,12 +50,19 @@ const GRAPH_W = MAIN_X + LANE_W * TOTAL_LANES;
 const yOf = (row: number) => TOP_PAD + row * ROW_H;
 const laneX = (lane: number) => MAIN_X + lane * LANE_W;
 
-const mainCommits: MainCommit[] = [
-  { hash: "a1b2c3d", message: "enroll: begin Chemical Engineering at RUET", row: 0 },
-  { hash: "e4f5g6h", message: "learn: start self-teaching full-stack web development", row: 1 },
-  { hash: "i7j8k9l", message: "apply: first internship application push", row: 8 },
-  { hash: "HEAD", message: "open to internship / junior developer roles", row: 19 },
-];
+// Row numbers are layout data (not content) and stay here, matched by
+// array position to the content registry in data/portfolio/commits.ts.
+const MAIN_ROWS = [0, 1, 8, 19];
+const AUCTASYNC_ROWS = [2, 3, 6, 7];
+const ASSETVERSE_ROWS = [9, 10, 11, 12];
+const CAREERPILOT_ROWS = [13, 14, 15, 18];
+const AUCTASYNC_BUGFIX_ROWS = [4, 5];
+const CAREERPILOT_BUGFIX_ROWS = [16, 17];
+
+const withRows = (content: Commit[], rows: number[]): (Commit & { row: number })[] =>
+  content.map((c, i) => ({ ...c, row: rows[i] }));
+
+const mainCommits: MainCommit[] = withRows(mainCommitContent, MAIN_ROWS);
 
 const branches: Branch[] = [
   {
@@ -58,17 +73,7 @@ const branches: Branch[] = [
     sourceY: yOf(1) + 22,
     mergeY: yOf(8) - 22,
     delay: 1.0,
-    commits: [
-      { hash: "b1c2d3e", message: "feat(auctasync): scaffold real-time auction platform", row: 2 },
-      { hash: "b4f5g6h", message: "feat(auctasync): implement WebSocket bidding core", row: 3 },
-      { hash: "b7i8j9k", message: "feat(auctasync): integrate SSLCommerz payment gateway", row: 6 },
-      {
-        hash: "b0l1m2n",
-        message:
-          "feat(auctasync): production deployment and load validation for concurrent bidding",
-        row: 7,
-      },
-    ],
+    commits: withRows(auctasyncCommitContent, AUCTASYNC_ROWS),
   },
   {
     name: "feat/assetverse",
@@ -78,28 +83,7 @@ const branches: Branch[] = [
     sourceY: yOf(8) + 22,
     mergeY: yOf(12) + 28,
     delay: 1.5,
-    commits: [
-      {
-        hash: "d1e2f3g",
-        message: "feat(assetverse): scaffold role-based asset management system",
-        row: 9,
-      },
-      {
-        hash: "d4g5h6i",
-        message: "feat(assetverse): implement RBAC with role hierarchy and permission checks",
-        row: 10,
-      },
-      {
-        hash: "d7h8i9j",
-        message: "feat(assetverse): build audit trail logging every asset state change",
-        row: 11,
-      },
-      {
-        hash: "d7k8l9m",
-        message: "feat(assetverse): milestone — full audit trail across asset lifecycle shipped",
-        row: 12,
-      },
-    ],
+    commits: withRows(assetverseCommitContent, ASSETVERSE_ROWS),
   },
   {
     name: "feat/careerpilot",
@@ -109,28 +93,7 @@ const branches: Branch[] = [
     sourceY: yOf(13) - 28,
     mergeY: yOf(18) + 28,
     delay: 2.0,
-    commits: [
-      {
-        hash: "c1d2e3f",
-        message: "feat(careerpilot): scaffold career roadmap generator, define user input flow",
-        row: 13,
-      },
-      {
-        hash: "c4g5h6i",
-        message: "feat(careerpilot): integrate LLM API for personalized roadmap generation",
-        row: 14,
-      },
-      {
-        hash: "c7h8i9j",
-        message: "feat(careerpilot): build voice-based mock interview pipeline",
-        row: 15,
-      },
-      {
-        hash: "c7j8k9l",
-        message: "feat(careerpilot): milestone — end-to-end roadmap + voice interview flow shipped",
-        row: 18,
-      },
-    ],
+    commits: withRows(careerpilotCommitContent, CAREERPILOT_ROWS),
   },
 ];
 
@@ -144,20 +107,7 @@ const bugfixBranches: BugfixBranch[] = [
     sourceY: yOf(3) + 20,
     mergeY: yOf(6) - 20,
     delay: 1.4,
-    commits: [
-      {
-        hash: "ra1c2d3",
-        message:
-          "fix(auctasync): [PLACEHOLDER] reproduce and isolate race condition in concurrent bid updates",
-        row: 4,
-      },
-      {
-        hash: "ra4e5f6",
-        message:
-          "fix(auctasync): [PLACEHOLDER] resolve race condition with server-authoritative bid ordering",
-        row: 5,
-      },
-    ],
+    commits: withRows(auctasyncBugfixCommitContent, AUCTASYNC_BUGFIX_ROWS),
   },
   {
     name: "bugfix/careerpilot-session-state",
@@ -168,20 +118,7 @@ const bugfixBranches: BugfixBranch[] = [
     sourceY: yOf(15) + 20,
     mergeY: yOf(18) - 20,
     delay: 2.4,
-    commits: [
-      {
-        hash: "sc1d2e3",
-        message:
-          "fix(careerpilot): [PLACEHOLDER] reproduce and isolate session-state bug in voice interview flow",
-        row: 16,
-      },
-      {
-        hash: "sc4f5g6",
-        message:
-          "fix(careerpilot): [PLACEHOLDER] resolve session-state bug with corrected state management",
-        row: 17,
-      },
-    ],
+    commits: withRows(careerpilotBugfixCommitContent, CAREERPILOT_BUGFIX_ROWS),
   },
 ];
 

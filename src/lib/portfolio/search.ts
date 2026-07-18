@@ -2,6 +2,15 @@
 
 import { projects, type ProjectKey } from "@/data/portfolio/projects";
 import { bugfixes } from "@/data/portfolio/bugfixes";
+import {
+  mainCommitContent,
+  auctasyncCommitContent,
+  assetverseCommitContent,
+  careerpilotCommitContent,
+  auctasyncBugfixCommitContent,
+  careerpilotBugfixCommitContent,
+  type CommitContent,
+} from "@/data/portfolio/commits";
 
 export type CommitMatch = {
   hash: string;
@@ -10,138 +19,23 @@ export type CommitMatch = {
   accent: string;
 };
 
-// Mirror of the commit registry rendered by GitGraph. Content is locked,
-// so a small duplication here keeps search decoupled from the SVG layout.
+// Built from the same content registry GitGraph reads from, so search and
+// the graph can never drift out of sync on hash/message text.
+function toMatches(
+  content: CommitContent[],
+  branch: string,
+  accent: (hash: string) => string,
+): CommitMatch[] {
+  return content.map((c) => ({ ...c, branch, accent: accent(c.hash) }));
+}
+
 const COMMITS: CommitMatch[] = [
-  // main
-  {
-    hash: "a1b2c3d",
-    message: "enroll: begin Chemical Engineering at RUET",
-    branch: "main",
-    accent: "#ffffff",
-  },
-  {
-    hash: "e4f5g6h",
-    message: "learn: start self-teaching full-stack web development",
-    branch: "main",
-    accent: "#ffffff",
-  },
-  {
-    hash: "i7j8k9l",
-    message: "apply: first internship application push",
-    branch: "main",
-    accent: "#ffffff",
-  },
-  {
-    hash: "HEAD",
-    message: "open to internship / junior developer roles",
-    branch: "main",
-    accent: "#34d399",
-  },
-  // feat/auctasync
-  {
-    hash: "b1c2d3e",
-    message: "feat(auctasync): scaffold real-time auction platform",
-    branch: "feat/auctasync",
-    accent: "#f59e0b",
-  },
-  {
-    hash: "b4f5g6h",
-    message: "feat(auctasync): implement WebSocket bidding core",
-    branch: "feat/auctasync",
-    accent: "#f59e0b",
-  },
-  {
-    hash: "b7i8j9k",
-    message: "feat(auctasync): integrate SSLCommerz payment gateway",
-    branch: "feat/auctasync",
-    accent: "#f59e0b",
-  },
-  {
-    hash: "b0l1m2n",
-    message: "feat(auctasync): production deployment and load validation for concurrent bidding",
-    branch: "feat/auctasync",
-    accent: "#f59e0b",
-  },
-  // feat/assetverse
-  {
-    hash: "d1e2f3g",
-    message: "feat(assetverse): scaffold role-based asset management system",
-    branch: "feat/assetverse",
-    accent: "#a78bfa",
-  },
-  {
-    hash: "d4g5h6i",
-    message: "feat(assetverse): implement RBAC with role hierarchy and permission checks",
-    branch: "feat/assetverse",
-    accent: "#a78bfa",
-  },
-  {
-    hash: "d7h8i9j",
-    message: "feat(assetverse): build audit trail logging every asset state change",
-    branch: "feat/assetverse",
-    accent: "#a78bfa",
-  },
-  {
-    hash: "d7k8l9m",
-    message: "feat(assetverse): milestone — full audit trail across asset lifecycle shipped",
-    branch: "feat/assetverse",
-    accent: "#a78bfa",
-  },
-  // feat/careerpilot
-  {
-    hash: "c1d2e3f",
-    message: "feat(careerpilot): scaffold career roadmap generator, define user input flow",
-    branch: "feat/careerpilot",
-    accent: "#34d399",
-  },
-  {
-    hash: "c4g5h6i",
-    message: "feat(careerpilot): integrate LLM API for personalized roadmap generation",
-    branch: "feat/careerpilot",
-    accent: "#34d399",
-  },
-  {
-    hash: "c7h8i9j",
-    message: "feat(careerpilot): build voice-based mock interview pipeline",
-    branch: "feat/careerpilot",
-    accent: "#34d399",
-  },
-  {
-    hash: "c7j8k9l",
-    message: "feat(careerpilot): milestone — end-to-end roadmap + voice interview flow shipped",
-    branch: "feat/careerpilot",
-    accent: "#34d399",
-  },
-  // bugfix branches
-  {
-    hash: "ra1c2d3",
-    message:
-      "fix(auctasync): [PLACEHOLDER] reproduce and isolate race condition in concurrent bid updates",
-    branch: "bugfix/auctasync-race-condition",
-    accent: "#f59e0b",
-  },
-  {
-    hash: "ra4e5f6",
-    message:
-      "fix(auctasync): [PLACEHOLDER] resolve race condition with server-authoritative bid ordering",
-    branch: "bugfix/auctasync-race-condition",
-    accent: "#f59e0b",
-  },
-  {
-    hash: "sc1d2e3",
-    message:
-      "fix(careerpilot): [PLACEHOLDER] reproduce and isolate session-state bug in voice interview flow",
-    branch: "bugfix/careerpilot-session-state",
-    accent: "#34d399",
-  },
-  {
-    hash: "sc4f5g6",
-    message:
-      "fix(careerpilot): [PLACEHOLDER] resolve session-state bug with corrected state management",
-    branch: "bugfix/careerpilot-session-state",
-    accent: "#34d399",
-  },
+  ...toMatches(mainCommitContent, "main", (hash) => (hash === "HEAD" ? "#34d399" : "#ffffff")),
+  ...toMatches(auctasyncCommitContent, "feat/auctasync", () => "#f59e0b"),
+  ...toMatches(assetverseCommitContent, "feat/assetverse", () => "#a78bfa"),
+  ...toMatches(careerpilotCommitContent, "feat/careerpilot", () => "#34d399"),
+  ...toMatches(auctasyncBugfixCommitContent, "bugfix/auctasync-race-condition", () => "#f59e0b"),
+  ...toMatches(careerpilotBugfixCommitContent, "bugfix/careerpilot-session-state", () => "#34d399"),
 ];
 
 // Additional searchable surface: project titles, descriptions, tags, and
