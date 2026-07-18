@@ -412,9 +412,11 @@ export function GitGraph() {
         <div className="absolute inset-0">
           {allNodes.map((n) => {
             const isHovered = hovered === n.hash;
+            const isHighlighted = highlighted === n.hash;
             return (
               <motion.button
                 key={n.hash}
+                id={`commit-${n.hash}`}
                 type="button"
                 onClick={(e) => openCommit(n, e)}
                 onMouseEnter={() => setHovered(n.hash)}
@@ -432,9 +434,15 @@ export function GitGraph() {
                   left: GRAPH_W + 8,
                   right: 0,
                   transform: "translateY(-50%)",
-                  background: isHovered ? "rgba(255,255,255,0.04)" : "transparent",
+                  background: isHighlighted
+                    ? `${n.color}22`
+                    : isHovered
+                      ? "rgba(255,255,255,0.04)"
+                      : "transparent",
+                  boxShadow: isHighlighted ? `0 0 0 1px ${n.color}55` : "none",
                 }}
               >
+
                 <span
                   className="shrink-0 tabular-nums pt-[2px]"
                   style={{ color: n.isHead ? "#34d399" : "#6b7280", fontSize: 12 }}
