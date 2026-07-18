@@ -179,6 +179,21 @@ type NodeMeta = {
 export function GitGraph() {
   const [hovered, setHovered] = useState<string | null>(null);
   const [selection, setSelection] = useState<CommitSelection | null>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onHighlight(e: Event) {
+      const hash = (e as CustomEvent<string>).detail;
+      if (!hash) return;
+      const el = document.getElementById(`commit-${hash}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlighted(hash);
+      window.setTimeout(() => setHighlighted((h) => (h === hash ? null : h)), 1800);
+    }
+    window.addEventListener("highlight-commit", onHighlight as EventListener);
+    return () => window.removeEventListener("highlight-commit", onHighlight as EventListener);
+  }, []);
+
 
   const allNodes: NodeMeta[] = [
     ...mainCommits.map((c, i) => ({
