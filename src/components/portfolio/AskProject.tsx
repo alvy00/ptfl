@@ -1,5 +1,6 @@
 /* eslint-disable prettier/prettier */
-import { useState, type FormEvent, useEffect } from "react";
+import { useState, type FormEvent } from "react";
+import { motion } from "framer-motion";
 import { getAIResponse } from "@/lib/portfolio/ask-project.mock";
 import type { ProjectKey } from "@/data/portfolio/projects";
 
@@ -17,24 +18,12 @@ export function AskProject({ projectKey, accent }: Props) {
 
   const disabled = status !== "idle";
 
-  useEffect(() => {
-    if (status !== "cooldown") return;
-
-    const timer = setTimeout(() => {
-      setStatus("idle");
-    }, COOLDOWN_MS);
-
-    return () => clearTimeout(timer);
-  }, [status]);
-
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     const q = question.trim();
     if (!q || disabled) return;
-
     setStatus("thinking");
     setAnswer(null);
-
     try {
       const res = await getAIResponse(projectKey, q);
       setAnswer(res);
@@ -42,6 +31,7 @@ export function AskProject({ projectKey, accent }: Props) {
       setAnswer("[error] request failed. try again.");
     } finally {
       setStatus("cooldown");
+      setTimeout(() => setStatus("idle"), COOLDOWN_MS);
     }
   }
 
@@ -76,17 +66,15 @@ export function AskProject({ projectKey, accent }: Props) {
         {status === "idle" && !question && (
           <span
             aria-hidden
-            className="inline-block h-3.5 w-[7px] -ml-1"
-            style={{
-              background: accent,
-              boxShadow: `0 0 6px ${accent}`,
-              animation: "ask-blink 1s steps(2, start) infinite",
-            }}
+            className="ask-cursor -ml-1"
+            style={{ background: accent, ["--ask-accent" as string]: accent }}
           />
         )}
-        <button
+        <motion.button
           type="submit"
           disabled={disabled || !question.trim()}
+          whileTap={{ scale: 0.88 }}
+          transition={{ duration: 0.12 }}
           className="rounded px-2 py-0.5 text-[11px] uppercase tracking-widest transition-opacity disabled:opacity-40"
           style={{
             border: `1px solid ${accent}66`,
@@ -95,40 +83,54 @@ export function AskProject({ projectKey, accent }: Props) {
           }}
         >
           {status === "thinking" ? "..." : status === "cooldown" ? "wait" : "run"}
-        </button>
+        </motion.button>
       </form>
 
-      <div aria-live="polite" aria-atomic="true" className="empty:hidden">
-        {(status === "thinking" || answer) && (
-          <div
-            className="mt-2 rounded-md border px-3 py-2 text-[12.5px] leading-relaxed"
-            style={{
-              borderColor: `${accent}33`,
-              background: "rgba(0,0,0,0.3)",
-              color: accent,
-            }}
-          >
-            {status === "thinking" ? (
-              <span className="text-gray-400">
-                <span style={{ color: accent }}>›</span> thinking
-                <span aria-hidden style={{ animation: "ask-blink 1s steps(2, start) infinite" }}>
-                  ...
-                </span>
+      {(status === "thinking" || answer) && (
+        <div
+          className="mt-2 rounded-md border px-3 py-2 text-[12.5px] leading-relaxed"
+          style={{
+            borderColor: `${accent}33`,
+            background: "rgba(0,0,0,0.3)",
+            color: accent,
+          }}
+        >
+          {status === "thinking" ? (
+            <span className="text-gray-400">
+              <span style={{ color: accent }}>›</span> thinking
+              <span aria-hidden style={{ animation: "ask-blink 1s steps(2, start) infinite" }}>
+                ...
               </span>
-            ) : (
-              <>
-                <span className="text-gray-500">› </span>
-                <span style={{ color: accent }}>{answer}</span>
-              </>
-            )}
-          </div>
-        )}
-      </div>
+            </span>
+          ) : (
+            <>
+              <span className="text-gray-500">› </span>
+              <span style={{ color: accent }}>{answer}</span>
+            </>
+          )}
+        </div>
+      )}
 
       <style>{`
         @keyframes ask-blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
+        }
+        .ask-cursor {
+          display: inline-block;
+          width: 7px;
+          height: 14px;
+          animation: ask-cursor-pulse 1s steps(2, start) infinite;
+        }
+        @keyframes ask-cursor-pulse {
+          0%, 100% {
+            opacity: 1;
+            box-shadow: 0 0 6px var(--ask-accent), 0 0 2px var(--ask-accent);
+          }
+          50% {
+            opacity: 0;
+            box-shadow: 0 0 0px transparent;
+          }
         }
       `}</style>
     </div>
