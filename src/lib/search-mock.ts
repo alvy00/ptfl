@@ -65,7 +65,8 @@ function extendedHaystack(c: CommitMatch): string {
   );
   if (key && projects[key]) {
     const p = projects[key];
-    parts.push(p.title, p.description, ...(p.tags ?? []), ...(p.features ?? []));
+    parts.push(p.name, p.description, ...p.stack);
+    for (const f of p.features) parts.push(f.title, f.detail);
   }
   for (const bf of Object.values(bugfixes)) {
     if (bf.branch === c.branch) parts.push(bf.title);
