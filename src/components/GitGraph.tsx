@@ -354,9 +354,14 @@ export function GitGraph() {
                 key={n.hash}
                 initial={{ opacity: 0, scale: 0.4 }}
                 animate={{ opacity: 1, scale: isHovered || isHighlighted ? 1.25 : 1 }}
-                transition={{ duration: 0.35, ease: "easeOut", delay: isHovered ? 0 : n.revealAt }}
+                transition={
+                  isHovered || isHighlighted
+                    ? { duration: 0.2, ease: "easeOut" }
+                    : { duration: 0.35, ease: "easeOut", delay: n.revealAt }
+                }
                 style={{ transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" as const }}
               >
+
                 {n.isHead && (
                   <motion.circle
                     cx={n.x}
