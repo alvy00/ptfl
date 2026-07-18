@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import { CommitModal, type CommitSelection } from "./CommitModal";
 import type { ProjectKey } from "@/data/projects";
 import { bugfixes, type BugfixKey } from "@/data/bugfixes";
