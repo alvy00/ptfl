@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
 import { CommitModal, type CommitSelection } from "./CommitModal";
 import type { ProjectKey } from "@/data/projects";
 import { bugfixes, type BugfixKey } from "@/data/bugfixes";
@@ -178,6 +179,21 @@ type NodeMeta = {
 export function GitGraph() {
   const [hovered, setHovered] = useState<string | null>(null);
   const [selection, setSelection] = useState<CommitSelection | null>(null);
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onHighlight(e: Event) {
+      const hash = (e as CustomEvent<string>).detail;
+      if (!hash) return;
+      const el = document.getElementById(`commit-${hash}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlighted(hash);
+      window.setTimeout(() => setHighlighted((h) => (h === hash ? null : h)), 1800);
+    }
+    window.addEventListener("highlight-commit", onHighlight as EventListener);
+    return () => window.removeEventListener("highlight-commit", onHighlight as EventListener);
+  }, []);
+
 
   const allNodes: NodeMeta[] = [
     ...mainCommits.map((c, i) => ({
@@ -331,12 +347,13 @@ export function GitGraph() {
           {/* nodes (visual only; interactive hitboxes are in HTML overlay) */}
           {allNodes.map((n) => {
             const isHovered = hovered === n.hash;
+            const isHighlighted = highlighted === n.hash;
             const baseR = n.isHead ? 7 : n.isMain ? 6 : n.isBugfix ? 4 : 5;
             return (
               <motion.g
                 key={n.hash}
                 initial={{ opacity: 0, scale: 0.4 }}
-                animate={{ opacity: 1, scale: isHovered ? 1.25 : 1 }}
+                animate={{ opacity: 1, scale: isHovered || isHighlighted ? 1.25 : 1 }}
                 transition={{ duration: 0.35, ease: "easeOut", delay: isHovered ? 0 : n.revealAt }}
                 style={{ transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" as const }}
               >
@@ -351,13 +368,27 @@ export function GitGraph() {
                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   />
                 )}
-                {isHovered && !n.isHead && (
+                {isHighlighted && (
+                  <motion.circle
+                    cx={n.x}
+                    cy={n.y}
+                    r={baseR + 4}
+                    fill="none"
+                    stroke={n.color}
+                    strokeWidth={2}
+                    initial={{ r: baseR, opacity: 0.9 }}
+                    animate={{ r: baseR + 18, opacity: 0 }}
+                    transition={{ duration: 1.2, ease: "easeOut", repeat: 1 }}
+                    style={{ filter: `drop-shadow(0 0 10px ${n.color})` }}
+                  />
+                )}
+                {(isHovered || isHighlighted) && !n.isHead && (
                   <circle
                     cx={n.x}
                     cy={n.y}
                     r={baseR + 6}
                     fill={n.color}
-                    opacity={0.25}
+                    opacity={isHighlighted ? 0.4 : 0.25}
                     style={{ filter: `drop-shadow(0 0 8px ${n.color})` }}
                   />
                 )}
@@ -376,13 +407,16 @@ export function GitGraph() {
           })}
         </svg>
 
+
         {/* Interactive overlay: row = hitbox for node + label */}
         <div className="absolute inset-0">
           {allNodes.map((n) => {
             const isHovered = hovered === n.hash;
+            const isHighlighted = highlighted === n.hash;
             return (
               <motion.button
                 key={n.hash}
+                id={`commit-${n.hash}`}
                 type="button"
                 onClick={(e) => openCommit(n, e)}
                 onMouseEnter={() => setHovered(n.hash)}
@@ -400,9 +434,15 @@ export function GitGraph() {
                   left: GRAPH_W + 8,
                   right: 0,
                   transform: "translateY(-50%)",
-                  background: isHovered ? "rgba(255,255,255,0.04)" : "transparent",
+                  background: isHighlighted
+                    ? `${n.color}22`
+                    : isHovered
+                      ? "rgba(255,255,255,0.04)"
+                      : "transparent",
+                  boxShadow: isHighlighted ? `0 0 0 1px ${n.color}55` : "none",
                 }}
               >
+
                 <span
                   className="shrink-0 tabular-nums pt-[2px]"
                   style={{ color: n.isHead ? "#34d399" : "#6b7280", fontSize: 12 }}

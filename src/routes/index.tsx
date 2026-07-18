@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { GitGraph } from "@/components/GitGraph";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -28,12 +29,14 @@ function Index() {
       style={{ backgroundColor: "#0b0c10", color: "#e5e7eb" }}
     >
       <div className="mx-auto max-w-3xl">
-        <header className="mb-12">
+        <header className="mb-8">
           <h1 className="text-2xl font-semibold tracking-tight">Alvy</h1>
           <p className="mt-2 text-gray-400">
             Chemical Engineering student at RUET — self-taught full-stack developer.
           </p>
         </header>
+
+        <GlobalSearch />
 
         <GitGraph />
       </div>
