@@ -1,6 +1,7 @@
+/* eslint-disable prettier/prettier */
 import { useState, type FormEvent } from "react";
-import { getAIResponse } from "@/lib/ai-mock";
-import type { ProjectKey } from "@/data/projects";
+import { getAIResponse } from "@/lib/portfolio/ask-project.mock";
+import type { ProjectKey } from "@/data/portfolio/projects";
 
 type Props = {
   projectKey: ProjectKey;
@@ -35,9 +36,7 @@ export function AskProject({ projectKey, accent }: Props) {
 
   return (
     <div className="mt-6">
-      <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">
-        ask
-      </div>
+      <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">ask</div>
       <form
         onSubmit={onSubmit}
         className="flex items-center gap-2 rounded-md border px-3 py-2 backdrop-blur"
@@ -46,7 +45,6 @@ export function AskProject({ projectKey, accent }: Props) {
           background: "rgba(255,255,255,0.03)",
         }}
       >
-
         <span
           className="select-none text-[13px]"
           style={{ color: accent, textShadow: `0 0 8px ${accent}66` }}
@@ -101,10 +99,7 @@ export function AskProject({ projectKey, accent }: Props) {
           {status === "thinking" ? (
             <span className="text-gray-400">
               <span style={{ color: accent }}>›</span> thinking
-              <span
-                aria-hidden
-                style={{ animation: "ask-blink 1s steps(2, start) infinite" }}
-              >
+              <span aria-hidden style={{ animation: "ask-blink 1s steps(2, start) infinite" }}>
                 ...
               </span>
             </span>

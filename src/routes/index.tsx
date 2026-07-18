@@ -1,6 +1,7 @@
+/* eslint-disable prettier/prettier */
 import { createFileRoute } from "@tanstack/react-router";
-import { GitGraph } from "@/components/GitGraph";
-import { GlobalSearch } from "@/components/GlobalSearch";
+import { GitGraph } from "@/components/portfolio/GitGraph";
+import { GlobalSearch } from "@/components/portfolio/GlobalSearch";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -43,4 +44,3 @@ function Index() {
     </main>
   );
 }
-

@@ -1,9 +1,10 @@
+/* eslint-disable prettier/prettier */
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 import { CommitModal, type CommitSelection } from "./CommitModal";
-import type { ProjectKey } from "@/data/projects";
-import { bugfixes, type BugfixKey } from "@/data/bugfixes";
+import type { ProjectKey } from "@/data/portfolio/projects";
+import { bugfixes, type BugfixKey } from "@/data/portfolio/bugfixes";
 
 type Commit = { hash: string; message: string };
 type MainCommit = Commit & { row: number };
@@ -61,7 +62,12 @@ const branches: Branch[] = [
       { hash: "b1c2d3e", message: "feat(auctasync): scaffold real-time auction platform", row: 2 },
       { hash: "b4f5g6h", message: "feat(auctasync): implement WebSocket bidding core", row: 3 },
       { hash: "b7i8j9k", message: "feat(auctasync): integrate SSLCommerz payment gateway", row: 6 },
-      { hash: "b0l1m2n", message: "feat(auctasync): production deployment and load validation for concurrent bidding", row: 7 },
+      {
+        hash: "b0l1m2n",
+        message:
+          "feat(auctasync): production deployment and load validation for concurrent bidding",
+        row: 7,
+      },
     ],
   },
   {
@@ -73,10 +79,26 @@ const branches: Branch[] = [
     mergeY: yOf(12) + 28,
     delay: 1.5,
     commits: [
-      { hash: "d1e2f3g", message: "feat(assetverse): scaffold role-based asset management system", row: 9 },
-      { hash: "d4g5h6i", message: "feat(assetverse): implement RBAC with role hierarchy and permission checks", row: 10 },
-      { hash: "d7h8i9j", message: "feat(assetverse): build audit trail logging every asset state change", row: 11 },
-      { hash: "d7k8l9m", message: "feat(assetverse): milestone — full audit trail across asset lifecycle shipped", row: 12 },
+      {
+        hash: "d1e2f3g",
+        message: "feat(assetverse): scaffold role-based asset management system",
+        row: 9,
+      },
+      {
+        hash: "d4g5h6i",
+        message: "feat(assetverse): implement RBAC with role hierarchy and permission checks",
+        row: 10,
+      },
+      {
+        hash: "d7h8i9j",
+        message: "feat(assetverse): build audit trail logging every asset state change",
+        row: 11,
+      },
+      {
+        hash: "d7k8l9m",
+        message: "feat(assetverse): milestone — full audit trail across asset lifecycle shipped",
+        row: 12,
+      },
     ],
   },
   {
@@ -88,10 +110,26 @@ const branches: Branch[] = [
     mergeY: yOf(18) + 28,
     delay: 2.0,
     commits: [
-      { hash: "c1d2e3f", message: "feat(careerpilot): scaffold career roadmap generator, define user input flow", row: 13 },
-      { hash: "c4g5h6i", message: "feat(careerpilot): integrate LLM API for personalized roadmap generation", row: 14 },
-      { hash: "c7h8i9j", message: "feat(careerpilot): build voice-based mock interview pipeline", row: 15 },
-      { hash: "c7j8k9l", message: "feat(careerpilot): milestone — end-to-end roadmap + voice interview flow shipped", row: 18 },
+      {
+        hash: "c1d2e3f",
+        message: "feat(careerpilot): scaffold career roadmap generator, define user input flow",
+        row: 13,
+      },
+      {
+        hash: "c4g5h6i",
+        message: "feat(careerpilot): integrate LLM API for personalized roadmap generation",
+        row: 14,
+      },
+      {
+        hash: "c7h8i9j",
+        message: "feat(careerpilot): build voice-based mock interview pipeline",
+        row: 15,
+      },
+      {
+        hash: "c7j8k9l",
+        message: "feat(careerpilot): milestone — end-to-end roadmap + voice interview flow shipped",
+        row: 18,
+      },
     ],
   },
 ];
@@ -107,8 +145,18 @@ const bugfixBranches: BugfixBranch[] = [
     mergeY: yOf(6) - 20,
     delay: 1.4,
     commits: [
-      { hash: "ra1c2d3", message: "fix(auctasync): [PLACEHOLDER] reproduce and isolate race condition in concurrent bid updates", row: 4 },
-      { hash: "ra4e5f6", message: "fix(auctasync): [PLACEHOLDER] resolve race condition with server-authoritative bid ordering", row: 5 },
+      {
+        hash: "ra1c2d3",
+        message:
+          "fix(auctasync): [PLACEHOLDER] reproduce and isolate race condition in concurrent bid updates",
+        row: 4,
+      },
+      {
+        hash: "ra4e5f6",
+        message:
+          "fix(auctasync): [PLACEHOLDER] resolve race condition with server-authoritative bid ordering",
+        row: 5,
+      },
     ],
   },
   {
@@ -121,8 +169,18 @@ const bugfixBranches: BugfixBranch[] = [
     mergeY: yOf(18) - 20,
     delay: 2.4,
     commits: [
-      { hash: "sc1d2e3", message: "fix(careerpilot): [PLACEHOLDER] reproduce and isolate session-state bug in voice interview flow", row: 16 },
-      { hash: "sc4f5g6", message: "fix(careerpilot): [PLACEHOLDER] resolve session-state bug with corrected state management", row: 17 },
+      {
+        hash: "sc1d2e3",
+        message:
+          "fix(careerpilot): [PLACEHOLDER] reproduce and isolate session-state bug in voice interview flow",
+        row: 16,
+      },
+      {
+        hash: "sc4f5g6",
+        message:
+          "fix(careerpilot): [PLACEHOLDER] resolve session-state bug with corrected state management",
+        row: 17,
+      },
     ],
   },
 ];
@@ -193,7 +251,6 @@ export function GitGraph() {
     window.addEventListener("highlight-commit", onHighlight as EventListener);
     return () => window.removeEventListener("highlight-commit", onHighlight as EventListener);
   }, []);
-
 
   const allNodes: NodeMeta[] = [
     ...mainCommits.map((c, i) => ({
@@ -361,7 +418,6 @@ export function GitGraph() {
                 }
                 style={{ transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" as const }}
               >
-
                 {n.isHead && (
                   <motion.circle
                     cx={n.x}
@@ -412,7 +468,6 @@ export function GitGraph() {
           })}
         </svg>
 
-
         {/* Interactive overlay: row = hitbox for node + label */}
         <div className="absolute inset-0">
           {allNodes.map((n) => {
@@ -447,7 +502,6 @@ export function GitGraph() {
                   boxShadow: isHighlighted ? `0 0 0 1px ${n.color}55` : "none",
                 }}
               >
-
                 <span
                   className="shrink-0 tabular-nums pt-[2px]"
                   style={{ color: n.isHead ? "#34d399" : "#6b7280", fontSize: 12 }}

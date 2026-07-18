@@ -1,6 +1,7 @@
+/* eslint-disable prettier/prettier */
 import { useEffect, useState, type FormEvent } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { getSearchResponse, type CommitMatch } from "@/lib/search-mock";
+import { getSearchResponse, type CommitMatch } from "@/lib/portfolio/search";
 
 const ACCENT = "#e5e7eb";
 const COOLDOWN_MS = 2000;
@@ -51,9 +52,7 @@ export function GlobalSearch() {
 
   return (
     <div className="mb-10">
-      <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">
-        search /
-      </div>
+      <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">search /</div>
       <form
         onSubmit={onSubmit}
         className="relative flex items-center gap-2 rounded-md border px-3 py-2 backdrop-blur"
@@ -137,10 +136,7 @@ export function GlobalSearch() {
               background: "rgba(0,0,0,0.35)",
             }}
           >
-            <div
-              className="px-3 py-2 text-[12.5px] leading-relaxed"
-              style={{ color: ACCENT }}
-            >
+            <div className="px-3 py-2 text-[12.5px] leading-relaxed" style={{ color: ACCENT }}>
               {status === "thinking" ? (
                 <span className="text-gray-400">
                   <span style={{ color: ACCENT }}>›</span> thinking
@@ -160,18 +156,13 @@ export function GlobalSearch() {
             </div>
 
             {result && (
-              <div
-                className="border-t px-3 py-2"
-                style={{ borderColor: `${ACCENT}18` }}
-              >
+              <div className="border-t px-3 py-2" style={{ borderColor: `${ACCENT}18` }}>
                 <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">
                   {result.matches.length} matching commit
                   {result.matches.length === 1 ? "" : "s"}
                 </div>
                 {result.matches.length === 0 ? (
-                  <div className="text-[12.5px] text-gray-500">
-                    no commits matched your query.
-                  </div>
+                  <div className="text-[12.5px] text-gray-500">no commits matched your query.</div>
                 ) : (
                   <ul className="space-y-1">
                     {result.matches.map((m) => (
@@ -181,9 +172,7 @@ export function GlobalSearch() {
                           onClick={() => highlightCommit(m.hash)}
                           className="group flex w-full items-start gap-3 rounded px-2 py-1 text-left transition-colors hover:bg-white/5"
                         >
-                          <span
-                            className="shrink-0 tabular-nums pt-[2px] text-[11.5px] text-gray-500 group-hover:text-gray-300"
-                          >
+                          <span className="shrink-0 tabular-nums pt-[2px] text-[11.5px] text-gray-500 group-hover:text-gray-300">
                             {m.hash}
                           </span>
                           <span
@@ -192,9 +181,7 @@ export function GlobalSearch() {
                           >
                             {m.message}
                           </span>
-                          <span
-                            className="ml-auto shrink-0 pt-[2px] text-[10.5px] uppercase tracking-widest text-gray-600"
-                          >
+                          <span className="ml-auto shrink-0 pt-[2px] text-[10.5px] uppercase tracking-widest text-gray-600">
                             {m.branch}
                           </span>
                         </button>

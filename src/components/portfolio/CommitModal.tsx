@@ -1,9 +1,15 @@
+/* eslint-disable prettier/prettier */
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect } from "react";
-import { commitDateFor, projects, relativeTime, type Project, type ProjectKey } from "@/data/projects";
-import { bugfixes, type BugfixKey } from "@/data/bugfixes";
+import {
+  commitDateFor,
+  projects,
+  relativeTime,
+  type Project,
+  type ProjectKey,
+} from "@/data/portfolio/projects";
+import { bugfixes, type BugfixKey } from "@/data/portfolio/bugfixes";
 import { AskProject } from "./AskProject";
-
 
 export type CommitSelection =
   | {
@@ -42,15 +48,9 @@ export function CommitModal({ selection, onClose }: Props) {
 
   return (
     <AnimatePresence>
-      {selection?.kind === "feature" && (
-        <FeatureModal selection={selection} onClose={onClose} />
-      )}
-      {selection?.kind === "main" && (
-        <MainPopover selection={selection} onClose={onClose} />
-      )}
-      {selection?.kind === "bugfix" && (
-        <BugfixModal selection={selection} onClose={onClose} />
-      )}
+      {selection?.kind === "feature" && <FeatureModal selection={selection} onClose={onClose} />}
+      {selection?.kind === "main" && <MainPopover selection={selection} onClose={onClose} />}
+      {selection?.kind === "bugfix" && <BugfixModal selection={selection} onClose={onClose} />}
       {selection?.kind === "bugfix-first" && (
         <SimplePopover
           hash={selection.hash}
@@ -106,7 +106,6 @@ function BugfixModal({
           border: `1px solid ${accent}33`,
           boxShadow: `0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px ${accent}22`,
         }}
-
       >
         <div className="max-h-[85vh] overflow-y-auto">
           {/* PR-style header */}
@@ -122,7 +121,10 @@ function BugfixModal({
                 border: "1px solid rgba(139,92,246,0.35)",
               }}
             >
-              <span className="inline-block h-1.5 w-1.5 rounded-full" style={{ background: "#c4b5fd" }} />
+              <span
+                className="inline-block h-1.5 w-1.5 rounded-full"
+                style={{ background: "#c4b5fd" }}
+              />
               Merged
             </span>
             <span className="text-gray-500">pull request</span>
@@ -140,17 +142,10 @@ function BugfixModal({
 
             <div className="mt-6 space-y-5 font-sans text-[13px] leading-relaxed">
               <PRSection label="Problem" body={bug.problem} />
-              <PRSection
-                label="What I Tried First"
-                body={bug.triedFirst}
-                tint="red"
-              />
+              <PRSection label="What I Tried First" body={bug.triedFirst} tint="red" />
               <PRSection label="Root Cause" body={bug.rootCause} />
               <PRSection label="The Fix" body={bug.fix} tint="green" />
-              <PRSection
-                label="What I'd Do Differently"
-                body={bug.wouldDoDifferently}
-              />
+              <PRSection label="What I'd Do Differently" body={bug.wouldDoDifferently} />
             </div>
           </div>
         </div>
@@ -167,28 +162,20 @@ function BugfixModal({
   );
 }
 
-function PRSection({
-  label,
-  body,
-  tint,
-}: {
-  label: string;
-  body: string;
-  tint?: "red" | "green";
-}) {
+function PRSection({ label, body, tint }: { label: string; body: string; tint?: "red" | "green" }) {
   const marker = tint === "red" ? "-" : tint === "green" ? "+" : null;
   const tintBg =
     tint === "red"
       ? "rgba(239, 68, 68, 0.08)"
       : tint === "green"
-      ? "rgba(34, 197, 94, 0.08)"
-      : "rgba(255,255,255,0.02)";
+        ? "rgba(34, 197, 94, 0.08)"
+        : "rgba(255,255,255,0.02)";
   const tintBorder =
     tint === "red"
       ? "rgba(239, 68, 68, 0.35)"
       : tint === "green"
-      ? "rgba(34, 197, 94, 0.35)"
-      : "rgba(255,255,255,0.08)";
+        ? "rgba(34, 197, 94, 0.35)"
+        : "rgba(255,255,255,0.08)";
   const markerColor = tint === "red" ? "#f87171" : tint === "green" ? "#4ade80" : undefined;
 
   return (
@@ -384,7 +371,6 @@ function FeatureModal({
           <AskProject projectKey={selection.projectKey} accent={accent} />
         </div>
 
-
         {/* Close */}
         <button
           onClick={onClose}
@@ -451,7 +437,10 @@ function SimplePopover({
         aria-modal="true"
         className="fixed z-50 font-mono"
         style={{
-          left: Math.min(anchorX + 20, typeof window !== "undefined" ? window.innerWidth - 300 : 400),
+          left: Math.min(
+            anchorX + 20,
+            typeof window !== "undefined" ? window.innerWidth - 300 : 400,
+          ),
           top: anchorY - 20,
         }}
         initial={{ opacity: 0, y: 6, scale: 0.96 }}
@@ -480,4 +469,3 @@ function SimplePopover({
     </>
   );
 }
-
