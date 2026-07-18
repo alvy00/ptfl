@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { GitGraph } from "@/components/GitGraph";
+import { GlobalSearch } from "@/components/GlobalSearch";
 
 export const Route = createFileRoute("/")({
   head: () => ({
