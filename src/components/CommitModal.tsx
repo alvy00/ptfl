@@ -101,11 +101,12 @@ function BugfixModal({
         exit={{ opacity: 0, y: 12, scale: 0.98 }}
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
         style={{
-          background: "rgba(20, 22, 30, 0.78)",
+          background: "rgba(20, 22, 30, 0.72)",
           backdropFilter: "blur(24px) saturate(160%)",
           border: `1px solid ${accent}33`,
           boxShadow: `0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px ${accent}22`,
         }}
+
       >
         <div className="max-h-[85vh] overflow-y-auto">
           {/* PR-style header */}
