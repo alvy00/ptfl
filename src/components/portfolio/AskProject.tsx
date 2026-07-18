@@ -36,22 +36,27 @@ export function AskProject({ projectKey, accent }: Props) {
   }
 
   return (
-    <div className="mt-6">
-      <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">ask</div>
+    <div className="mt-5 sm:mt-7 w-full max-w-full overflow-hidden">
+      {/* Reduced font size slightly for a tighter terminal-badge feel */}
+      <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
+        ask
+      </div>
+
       <form
         onSubmit={onSubmit}
-        className="flex items-center gap-2 rounded-md border px-3 py-2 backdrop-blur"
+        className="flex items-center gap-2 rounded-md border px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur w-full"
         style={{
-          borderColor: `${accent}55`,
-          background: "rgba(255,255,255,0.03)",
+          borderColor: `${accent}44`, // Subtly reduced opacity for a cleaner line trace
+          background: "rgba(255,255,255,0.02)",
         }}
       >
         <span
-          className="select-none text-[13px]"
-          style={{ color: accent, textShadow: `0 0 8px ${accent}66` }}
+          className="select-none text-[14px] sm:text-[15.5px] shrink-0"
+          style={{ color: accent, textShadow: `0 0 6px ${accent}55` }}
         >
           $
         </span>
+
         <input
           type="text"
           value={question}
@@ -59,39 +64,42 @@ export function AskProject({ projectKey, accent }: Props) {
           disabled={disabled}
           placeholder="ask about this project"
           aria-label="Ask about this project"
-          className="flex-1 bg-transparent text-[13px] text-white placeholder:text-gray-500 focus:outline-none disabled:opacity-60"
+          className="flex-1 min-w-0 bg-transparent text-[14px] sm:text-[15.5px] text-white placeholder:text-gray-500 focus:outline-none disabled:opacity-60"
           spellCheck={false}
           autoComplete="off"
         />
+
         {status === "idle" && !question && (
           <span
             aria-hidden
-            className="ask-cursor -ml-1"
+            className="ask-cursor -ml-1 shrink-0"
             style={{ background: accent, ["--ask-accent" as string]: accent }}
           />
         )}
+
         <motion.button
           type="submit"
           disabled={disabled || !question.trim()}
-          whileTap={{ scale: 0.88 }}
-          transition={{ duration: 0.12 }}
-          className="rounded px-2 py-0.5 text-[11px] uppercase tracking-widest transition-opacity disabled:opacity-40"
+          whileTap={{ scale: 0.92 }}
+          transition={{ duration: 0.1 }}
+          className="rounded px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-[13px] uppercase tracking-widest transition-opacity disabled:opacity-30 shrink-0 select-none"
           style={{
-            border: `1px solid ${accent}66`,
+            border: `1px solid ${accent}55`,
             color: accent,
-            background: `${accent}10`,
+            background: `${accent}08`,
           }}
         >
           {status === "thinking" ? "..." : status === "cooldown" ? "wait" : "run"}
         </motion.button>
       </form>
 
+      {/* Output Panel: Scaled down with text wrapping protection for smaller devices */}
       {(status === "thinking" || answer) && (
         <div
-          className="mt-2 rounded-md border px-3 py-2 text-[12.5px] leading-relaxed"
+          className="mt-2 rounded-md border px-3 py-2 sm:px-4 sm:py-2.5 text-[13.5px] sm:text-[15px] leading-relaxed break-words word-break"
           style={{
-            borderColor: `${accent}33`,
-            background: "rgba(0,0,0,0.3)",
+            borderColor: `${accent}22`,
+            background: "rgba(0,0,0,0.25)",
             color: accent,
           }}
         >
@@ -103,10 +111,11 @@ export function AskProject({ projectKey, accent }: Props) {
               </span>
             </span>
           ) : (
-            <>
-              <span className="text-gray-500">› </span>
-              <span style={{ color: accent }}>{answer}</span>
-            </>
+            <div className="flex items-start gap-1.5">
+              <span className="text-gray-500 shrink-0 select-none">›</span>
+              {/* Inherits accent color gracefully but avoids eye strain with long reading text */}
+              <span className="text-gray-200 flex-1 min-w-0 break-words">{answer}</span>
+            </div>
           )}
         </div>
       )}
@@ -118,9 +127,15 @@ export function AskProject({ projectKey, accent }: Props) {
         }
         .ask-cursor {
           display: inline-block;
-          width: 7px;
+          width: 6px;
           height: 14px;
           animation: ask-cursor-pulse 1s steps(2, start) infinite;
+        }
+        @media (min-width: 640px) {
+          .ask-cursor {
+            width: 8px;
+            height: 16.5px;
+          }
         }
         @keyframes ask-cursor-pulse {
           0%, 100% {

@@ -73,11 +73,17 @@ export function GlobalSearch() {
     }
     .search-cursor {
       display: inline-block;
-      width: 7px;
+      width: 6px;
       height: 14px;
       margin-left: 2px;
       vertical-align: middle;
       animation: search-cursor-pulse 1s steps(2, start) infinite;
+    }
+    @media (min-width: 640px) {
+      .search-cursor {
+        width: 8px;
+        height: 16.5px;
+      }
     }
     @keyframes search-cursor-pulse {
       0%, 100% {
@@ -96,16 +102,16 @@ export function GlobalSearch() {
   );
 
   return (
-    <div className="mb-10 w-full max-w-3xl mx-auto">
+    <div className="mb-8 sm:mb-12 w-full max-w-4xl mx-auto px-4 sm:px-0">
       <style dangerouslySetInnerHTML={{ __html: dynamicStyles }} />
 
-      <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500 font-mono">
+      <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500 font-mono">
         search /
       </div>
 
       <form
         onSubmit={onSubmit}
-        className="relative flex items-center gap-2 rounded-md border px-3 py-2 backdrop-blur-md transition-all duration-300"
+        className="relative flex items-center gap-2 sm:gap-3 rounded-md border px-3 py-2 sm:px-4 sm:py-2.5 backdrop-blur-md transition-all duration-300"
         style={{
           borderColor: `${ACCENT}22`,
           background: "rgba(255,255,255,0.02)",
@@ -113,32 +119,32 @@ export function GlobalSearch() {
         }}
       >
         <span
-          className="select-none text-[13px] font-mono font-bold"
+          className="select-none text-sm sm:text-[15.5px] font-mono font-bold"
           style={{ color: ACCENT, textShadow: `0 0 8px ${ACCENT}33` }}
         >
           $
         </span>
 
-        <div className="relative flex-1 flex items-center h-5">
+        <div className="relative flex-1 flex items-center h-5 sm:h-6 min-w-0">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             disabled={disabled}
             aria-label="Search commits"
-            className="peer relative z-10 w-full bg-transparent text-[13px] font-mono text-white focus:outline-none disabled:opacity-60"
+            className="peer relative z-10 w-full bg-transparent text-sm sm:text-[15.5px] font-mono text-white focus:outline-none disabled:opacity-60"
             spellCheck={false}
             autoComplete="off"
           />
 
           {query.length === 0 && (
-            <div className="pointer-events-none absolute left-0 overflow-hidden text-[13px] font-mono text-gray-600">
+            <div className="pointer-events-none absolute left-0 right-0 overflow-hidden text-sm sm:text-[15.5px] font-mono text-gray-600">
               <AnimatePresence mode="wait">
                 <motion.span
                   key={placeholderIdx}
-                  initial={{ opacity: 0, y: 6 }}
+                  initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }}
+                  exit={{ opacity: 0, y: -4 }}
                   transition={{ duration: 0.25, ease: "easeInOut" }}
                   className="block truncate"
                 >
@@ -156,7 +162,7 @@ export function GlobalSearch() {
           disabled={disabled || !query.trim()}
           whileHover={{ scale: disabled ? 1 : 1.02 }}
           whileTap={{ scale: disabled ? 1 : 0.95 }}
-          className="rounded px-2.5 py-0.5 text-[11px] font-mono uppercase tracking-widest transition-all duration-200 disabled:opacity-30"
+          className="rounded px-2.5 py-0.5 sm:px-3 sm:py-1 text-[11px] sm:text-[13px] font-mono uppercase tracking-widest transition-all duration-200 disabled:opacity-30 shrink-0"
           style={{
             border: `1px solid ${ACCENT}44`,
             color: ACCENT,
@@ -174,14 +180,14 @@ export function GlobalSearch() {
             animate={{ opacity: 1, height: "auto", y: 0 }}
             exit={{ opacity: 0, height: 0, y: -4 }}
             transition={{ type: "spring", duration: 0.4, bounce: 0.1 }}
-            className="mt-3 overflow-hidden rounded-md border backdrop-blur-md"
+            className="mt-3 sm:mt-4 overflow-hidden rounded-md border backdrop-blur-md"
             style={{
               borderColor: `${ACCENT}15`,
               background: "rgba(0,0,0,0.4)",
             }}
           >
             <div
-              className="px-3 py-2 text-[12.5px] font-mono leading-relaxed"
+              className="px-3 py-2.5 sm:px-4 sm:py-3 text-sm sm:text-[15px] font-mono leading-relaxed break-words"
               style={{ color: ACCENT }}
             >
               {status === "thinking" ? (
@@ -208,16 +214,16 @@ export function GlobalSearch() {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.1 }}
-                className="border-t px-3 py-2"
+                className="border-t px-3 py-2.5 sm:px-4 sm:py-3"
                 style={{ borderColor: `${ACCENT}11` }}
               >
-                <div className="mb-2 text-[10.5px] font-mono uppercase tracking-widest text-gray-500">
+                <div className="mb-2 text-[11px] sm:text-[12.5px] font-mono uppercase tracking-widest text-gray-500">
                   {result.matches.length} matching commit
                   {result.matches.length === 1 ? "" : "s"}
                 </div>
 
                 {result.matches.length === 0 ? (
-                  <div className="text-[12.5px] font-mono text-gray-500 py-1">
+                  <div className="text-sm sm:text-[15px] font-mono text-gray-500 py-1">
                     no commits matched your query.
                   </div>
                 ) : (
@@ -225,25 +231,32 @@ export function GlobalSearch() {
                     variants={containerVariants}
                     initial="hidden"
                     animate="show"
-                    className="space-y-1 max-h-[260px] overflow-y-auto pr-1"
+                    className="space-y-1.5 max-h-[260px] sm:max-h-[300px] overflow-y-auto pr-1 custom-scrollbar"
                   >
                     {result.matches.map((m) => (
                       <motion.li key={m.hash} variants={itemVariants}>
                         <button
                           type="button"
                           onClick={() => highlightCommit(m.hash)}
-                          className="group flex w-full items-start gap-3 rounded px-2 py-1.5 text-left transition-colors duration-150 hover:bg-white/5"
+                          className="group flex flex-col sm:flex-row w-full items-stretch sm:items-start gap-1 sm:gap-4 rounded px-2 py-2 text-left transition-colors duration-150 hover:bg-white/5 border border-transparent hover:border-white/5 sm:border-none"
                         >
-                          <span className="shrink-0 tabular-nums pt-[2px] text-[11.5px] font-mono text-gray-500 group-hover:text-gray-300">
-                            {m.hash}
-                          </span>
+                          <div className="flex items-center justify-between sm:justify-start gap-4 shrink-0">
+                            <span className="tabular-nums text-xs sm:text-[13.5px] font-mono text-gray-500 group-hover:text-gray-300">
+                              {m.hash}
+                            </span>
+                            <span className="inline-block sm:hidden text-[11px] font-mono uppercase tracking-widest text-gray-600 group-hover:text-gray-400">
+                              {m.branch}
+                            </span>
+                          </div>
+
                           <span
-                            className="text-[12.5px] font-mono leading-snug break-all flex-1"
+                            className="text-xs sm:text-[15px] font-mono leading-snug break-words flex-1 min-w-0"
                             style={{ color: m.accent || ACCENT }}
                           >
                             {m.message}
                           </span>
-                          <span className="shrink-0 pt-[2px] text-[10.5px] font-mono uppercase tracking-widest text-gray-600 group-hover:text-gray-400 transition-colors">
+
+                          <span className="hidden sm:inline shrink-0 pt-[2px] text-[12.5px] font-mono uppercase tracking-widest text-gray-600 group-hover:text-gray-400 transition-colors">
                             {m.branch}
                           </span>
                         </button>

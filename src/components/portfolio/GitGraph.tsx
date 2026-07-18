@@ -1,5 +1,5 @@
 /* eslint-disable prettier/prettier */
-import { motion, useScroll, useTransform, useMotionValueEvent } from "framer-motion";
+import { motion, useScroll, useTransform, useMotionValueEvent, useSpring } from "framer-motion";
 import { useEffect, useRef, useState, useMemo } from "react";
 
 import { CommitModal, type CommitSelection } from "./CommitModal";
@@ -40,12 +40,12 @@ type BugfixBranch = {
   delay: number;
 };
 
-// Increased row height slightly to give wrapped two-line commits breathing room
-const ROW_H = 64;
-const TOP_PAD = 48;
-const MAIN_X = 28;
-const LANE_W = 40;
-const TOTAL_LANES = 6; // main(0) auc(1) bug-auc(2) asset(3) career(4) bug-career(5)
+// Slightly reduced spacing (scaled down 10-15% for cleaner fit)
+const ROW_H = 68;
+const TOP_PAD = 52;
+const MAIN_X = 24;
+const LANE_W = 34; // Tighter configuration for mobile screens
+const TOTAL_LANES = 6;
 const GRAPH_W = MAIN_X + LANE_W * TOTAL_LANES;
 
 const yOf = (row: number) => TOP_PAD + row * ROW_H;
@@ -164,7 +164,7 @@ type NodeMeta = {
   hash: string;
   message: string;
   color: string;
-  textColor: string; // Separate desaturated value for text-specific styling
+  textColor: string;
   isHead?: boolean;
   isMain?: boolean;
   isBugfix?: boolean;
@@ -174,7 +174,7 @@ type NodeMeta = {
   commitTotal?: number;
   bugfixKey?: BugfixKey;
   bugfixCommitIndex?: number;
-  branchName?: string; // Appended context to track branch roots
+  branchName?: string;
 };
 
 function ScrollProgress({
@@ -192,7 +192,7 @@ function ScrollProgress({
     <>
       <motion.div
         aria-hidden="true"
-        className="fixed left-0 top-0 z-[60] h-[2px] origin-left"
+        className="fixed left-0 top-0 z-[60] h-[3px] origin-left"
         style={{
           scaleX: progress,
           width: "100%",
@@ -202,7 +202,7 @@ function ScrollProgress({
       />
       <div
         aria-label={`Logged commits counter: ${count} of ${TOTAL_COMMIT_COUNT}`}
-        className="fixed right-3 top-2 z-[60] rounded px-2 py-0.5 font-mono text-[10px] tabular-nums tracking-widest text-gray-500"
+        className="fixed right-4 top-3 z-[60] rounded px-2 py-0.5 font-mono text-[11px] sm:text-[12px] tabular-nums tracking-widest text-gray-500"
         style={{ background: "rgba(14,15,19,0.6)", backdropFilter: "blur(6px)" }}
       >
         {count} / {TOTAL_COMMIT_COUNT}
@@ -211,15 +211,48 @@ function ScrollProgress({
   );
 }
 
-// Helper to render semantic inline SVGs based on commit message keywords
+function AmbientGlow({
+  amber,
+  purple,
+  green,
+}: {
+  amber: ReturnType<typeof useTransform<number, string>>;
+  purple: ReturnType<typeof useTransform<number, string>>;
+  green: ReturnType<typeof useTransform<number, string>>;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useMotionValueEvent(amber, "change", (v) => {
+    ref.current?.style.setProperty("--amber-a", v);
+  });
+  useMotionValueEvent(purple, "change", (v) => {
+    ref.current?.style.setProperty("--purple-a", v);
+  });
+  useMotionValueEvent(green, "change", (v) => {
+    ref.current?.style.setProperty("--green-a", v);
+  });
+
+  return (
+    <div
+      ref={ref}
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-0 z-0 graph-ambient"
+      style={{
+        ["--amber-a" as string]: "rgba(245,158,11,0.02)",
+        ["--purple-a" as string]: "rgba(167,139,250,0.02)",
+        ["--green-a" as string]: "rgba(52,211,153,0.02)",
+      }}
+    />
+  );
+}
+
 function CommitIcon({ message, color }: { message: string; color: string }) {
   const lowerMsg = message.toLowerCase();
 
-  // 1. Sprout/Seedling for "scaffold"
   if (lowerMsg.includes("scaffold")) {
     return (
       <svg
-        className="shrink-0 w-3 h-3 self-center"
+        className="shrink-0 w-3.5 h-3.5 self-center"
         fill="none"
         viewBox="0 0 24 24"
         stroke={color}
@@ -234,11 +267,10 @@ function CommitIcon({ message, color }: { message: string; color: string }) {
     );
   }
 
-  // 2. Lightning Bolt for "implement" or "integrate"
   if (lowerMsg.includes("implement") || lowerMsg.includes("integrate")) {
     return (
       <svg
-        className="shrink-0 w-3 h-3 self-center"
+        className="shrink-0 w-3.5 h-3.5 self-center"
         fill="none"
         viewBox="0 0 24 24"
         stroke={color}
@@ -253,11 +285,10 @@ function CommitIcon({ message, color }: { message: string; color: string }) {
     );
   }
 
-  // 3. Wrench for "fix(" or "resolve"
   if (lowerMsg.startsWith("fix(") || lowerMsg.includes("resolve")) {
     return (
       <svg
-        className="shrink-0 w-3 h-3 self-center"
+        className="shrink-0 w-3.5 h-3.5 self-center"
         fill="none"
         viewBox="0 0 24 24"
         stroke={color}
@@ -272,11 +303,10 @@ function CommitIcon({ message, color }: { message: string; color: string }) {
     );
   }
 
-  // 4. Flag for "milestone"
   if (lowerMsg.includes("milestone")) {
     return (
       <svg
-        className="shrink-0 w-3 h-3 self-center"
+        className="shrink-0 w-3.5 h-3.5 self-center"
         fill="none"
         viewBox="0 0 24 24"
         stroke={color}
@@ -305,25 +335,44 @@ export function GitGraph() {
     offset: ["start center", "end end"],
   });
   const spineProgress = useTransform(scrollYProgress, [0, 1], [0, 1]);
+  const spineY2 = useTransform(spineProgress, [0, 1], [yOf(0), yOf(TOTAL_ROWS - 1)]);
 
-  // SCROLL-REACTIVE AMBIENT BACKGROUND: Interpolates background colors based on linear progression through story forks
-  const ambientAmber = "rgba(245,158,11,0.06)";
-  const ambientPurple = "rgba(167,139,250,0.06)";
-  const ambientGreen = "rgba(52,211,153,0.06)";
-  const ambientNeutral = "rgba(30,41,59,0.01)";
+  const smoothProgress = useSpring(spineProgress, {
+    stiffness: 90,
+    damping: 26,
+    mass: 0.5,
+  });
 
-  const ambientColor = useTransform(
-    spineProgress,
-    [0.0, 0.1, 0.35, 0.45, 0.6, 0.7, 0.9, 1.0],
+  const amberGlow = useTransform(
+    smoothProgress,
+    [0.0, 0.08, 0.35, 0.42],
     [
-      ambientNeutral, // main early
-      ambientAmber, // auctasync active
-      ambientAmber,
-      ambientNeutral, // main mid
-      ambientPurple, // assetverse active
-      ambientNeutral, // main lower mid
-      ambientGreen, // careerpilot active
-      ambientNeutral, // final main commits
+      "rgba(245,158,11,0.02)",
+      "rgba(245,158,11,0.09)",
+      "rgba(245,158,11,0.09)",
+      "rgba(245,158,11,0.02)",
+    ],
+  );
+
+  const purpleGlow = useTransform(
+    smoothProgress,
+    [0.38, 0.5, 0.68, 0.75],
+    [
+      "rgba(167,139,250,0.02)",
+      "rgba(167,139,250,0.09)",
+      "rgba(167,139,250,0.09)",
+      "rgba(167,139,250,0.02)",
+    ],
+  );
+
+  const greenGlow = useTransform(
+    smoothProgress,
+    [0.68, 0.78, 0.92, 0.98],
+    [
+      "rgba(52,211,153,0.02)",
+      "rgba(52,211,153,0.09)",
+      "rgba(52,211,153,0.09)",
+      "rgba(52,211,153,0.02)",
     ],
   );
 
@@ -350,7 +399,6 @@ export function GitGraph() {
     };
   }, []);
 
-  // Maps text colors about 10-15% toward gray to desaturate them for layout labels
   const allNodes = useMemo<NodeMeta[]>(
     () => [
       ...mainCommits.map((c, i) => ({
@@ -367,9 +415,9 @@ export function GitGraph() {
       ...branches.flatMap((b, bi) =>
         b.commits.map((c, i) => {
           let textColor = b.color;
-          if (b.projectKey === "auctasync") textColor = "#de9722"; // #f59e0b desaturated
-          if (b.projectKey === "assetverse") textColor = "#a28ded"; // #a78bfa desaturated
-          if (b.projectKey === "careerpilot") textColor = "#3cdbb1"; // #34d399 desaturated
+          if (b.projectKey === "auctasync") textColor = "#de9722";
+          if (b.projectKey === "assetverse") textColor = "#a28ded";
+          if (b.projectKey === "careerpilot") textColor = "#3cdbb1";
 
           return {
             x: laneX(b.lane),
@@ -382,7 +430,7 @@ export function GitGraph() {
             projectKey: b.projectKey,
             commitIndex: i,
             commitTotal: b.commits.length,
-            branchName: i === 0 ? b.name : undefined, // Attach only on branch root
+            branchName: i === 0 ? b.name : undefined,
           };
         }),
       ),
@@ -403,7 +451,7 @@ export function GitGraph() {
             revealDelay: bi * 0.1 + i * 0.06,
             bugfixKey: b.bugfixKey,
             bugfixCommitIndex: i,
-            branchName: i === 0 ? b.name : undefined, // Attach only on branch root
+            branchName: i === 0 ? b.name : undefined,
           };
         }),
       ),
@@ -458,17 +506,17 @@ export function GitGraph() {
     <>
       <ScrollProgress progress={spineProgress} />
 
-      <div ref={containerRef} className="relative w-full" style={{ height: HEIGHT }}>
-        {/* SCROLL-REACTIVE AMBIENT BACKGROUND: Custom background layer syncing color switches to spine state */}
-        <motion.div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 -z-10 graph-ambient"
-          style={{ backgroundColor: ambientColor }}
-        />
+      <AmbientGlow amber={amberGlow} purple={purpleGlow} green={greenGlow} />
 
+      {/* Added horizontal padding on parent container to guarantee no mobile edge-clipping */}
+      <div
+        ref={containerRef}
+        className="relative w-full max-w-full overflow-x-hidden px-2 sm:px-4"
+        style={{ height: HEIGHT }}
+      >
         {/* SVG graph */}
         <svg
-          className="pointer-events-none absolute inset-y-0 left-0"
+          className="pointer-events-none absolute inset-y-0 left-2 sm:left-4"
           width={GRAPH_W}
           height={HEIGHT}
           viewBox={`0 0 ${GRAPH_W} ${HEIGHT}`}
@@ -477,7 +525,7 @@ export function GitGraph() {
         >
           <defs>
             <filter id="head-glow" x="-100%" y="-100%" width="300%" height="300%">
-              <feGaussianBlur stdDeviation="4" opacity="0.35" result="blur" />
+              <feGaussianBlur stdDeviation="4" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
@@ -490,7 +538,7 @@ export function GitGraph() {
             x1={MAIN_X}
             y1={yOf(0)}
             x2={MAIN_X}
-            y2={useTransform(spineProgress, [0, 1], [yOf(0), yOf(TOTAL_ROWS - 1)])}
+            y2={spineY2}
             stroke="#ffffff"
             strokeWidth={4}
             strokeLinecap="round"
@@ -503,7 +551,7 @@ export function GitGraph() {
               d={branchPath(b)}
               fill="none"
               stroke={b.color}
-              strokeWidth={2}
+              strokeWidth={2.25}
               strokeLinecap="round"
               initial={{ pathLength: 0, opacity: 0.5 }}
               whileInView={{ pathLength: 1, opacity: 0.9 }}
@@ -519,7 +567,7 @@ export function GitGraph() {
               d={bugfixPath(b)}
               fill="none"
               stroke={b.color}
-              strokeWidth={1.75}
+              strokeWidth={2}
               strokeLinecap="round"
               strokeDasharray="5 4"
               initial={{ opacity: 0 }}
@@ -533,7 +581,7 @@ export function GitGraph() {
           {allNodes.map((n) => {
             const isHovered = hovered === n.hash;
             const isHighlighted = highlighted === n.hash;
-            const baseR = n.isHead ? 7 : n.isMain ? 6 : n.isBugfix ? 4 : 5;
+            const baseR = n.isHead ? 7.5 : n.isMain ? 6.5 : n.isBugfix ? 4.5 : 5.5;
             return (
               <motion.g
                 key={n.hash}
@@ -552,10 +600,10 @@ export function GitGraph() {
                   <motion.circle
                     cx={n.x}
                     cy={n.y}
-                    r={12}
+                    r={12.5}
                     fill="#34d399"
                     opacity={0.35}
-                    animate={{ r: [12, 20, 12], opacity: [0.45, 0.05, 0.45] }}
+                    animate={{ r: [12.5, 20, 12.5], opacity: [0.45, 0.05, 0.45] }}
                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   />
                 )}
@@ -570,17 +618,17 @@ export function GitGraph() {
                     initial={{ r: baseR, opacity: 0.9 }}
                     animate={{ r: baseR + 18, opacity: 0 }}
                     transition={{ duration: 1.2, ease: "easeOut", repeat: 1 }}
-                    style={{ filter: `drop-shadow(0 0 10px ${n.color})` }}
+                    style={{ filter: `drop-shadow(0 0 8px ${n.color})` }}
                   />
                 )}
                 {(isHovered || isHighlighted) && !n.isHead && (
                   <circle
                     cx={n.x}
                     cy={n.y}
-                    r={baseR + 6}
+                    r={baseR + 5}
                     fill={n.color}
                     opacity={isHighlighted ? 0.4 : 0.25}
-                    style={{ filter: `drop-shadow(0 0 8px ${n.color})` }}
+                    style={{ filter: `drop-shadow(0 0 6px ${n.color})` }}
                   />
                 )}
                 <circle
@@ -589,7 +637,7 @@ export function GitGraph() {
                   r={baseR}
                   fill="#0e0f13"
                   stroke={n.isHead ? "#34d399" : n.color}
-                  strokeWidth={n.isHead ? 2.5 : n.isBugfix ? 1.5 : 2}
+                  strokeWidth={n.isHead ? 2.5 : n.isBugfix ? 1.75 : 2}
                   strokeDasharray={n.isBugfix ? "2 1.5" : undefined}
                   filter={n.isHead ? "url(#head-glow)" : undefined}
                 />
@@ -598,8 +646,8 @@ export function GitGraph() {
           })}
         </svg>
 
-        {/* Interactive overlay */}
-        <div className="absolute inset-0">
+        {/* Dynamic, Fluid Interactive Overlay (No hardcoded absolute layout width limits) */}
+        <div className="absolute inset-y-0 left-2 sm:left-4 right-2 sm:right-4 pointer-events-none">
           {allNodes.map((n) => {
             const isHovered = hovered === n.hash;
             const isHighlighted = highlighted === n.hash;
@@ -608,25 +656,26 @@ export function GitGraph() {
             return (
               <div
                 key={n.hash}
-                className="absolute flex flex-col"
+                className="absolute flex flex-col pointer-events-auto"
                 style={{
                   top: n.y,
-                  left: GRAPH_W + 8,
+                  // Positions textual columns neatly using a dynamic percentage-fallback mix
+                  left: `calc(${GRAPH_W}px + 8px)`,
                   right: 0,
                   transform: "translateY(-50%)",
                 }}
               >
-                {/* 1. BRANCH CONTEXT LABEL: Rendered contextually right above the first branch commit entry */}
+                {/* branch context label */}
                 {n.branchName && (
                   <motion.div
                     initial={{ opacity: 0, y: 4 }}
                     whileInView={{ opacity: 0.45, y: 0 }}
                     viewport={{ once: true, amount: 0.6 }}
                     transition={{ duration: 0.4, ease: "easeOut", delay: n.revealDelay }}
-                    className="text-[10px] font-mono tracking-tight text-gray-400 select-none pb-1 pointer-events-none flex items-center gap-1"
+                    className="text-[10px] sm:text-[11px] font-mono tracking-tight text-gray-400 select-none pb-0.5 pointer-events-none flex items-center gap-1"
                   >
                     <span className="text-gray-600 font-bold font-sans">$</span>
-                    <span>on branch {n.branchName}</span>
+                    <span className="truncate">on {n.branchName}</span>
                   </motion.div>
                 )}
 
@@ -640,11 +689,11 @@ export function GitGraph() {
                   onBlur={() => setHovered((h) => (h === n.hash ? null : h))}
                   title={n.message}
                   aria-label={`Commit selection: ${n.hash} ${n.message}`}
-                  initial={{ opacity: 0, x: -8 }}
+                  initial={{ opacity: 0, x: -6 }}
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true, amount: 0.6 }}
                   transition={{ duration: 0.35, ease: "easeOut", delay: n.revealDelay + 0.05 }}
-                  className="flex items-start gap-3 rounded-md px-1 py-0.5 text-left transition-all duration-200 w-full relative group"
+                  className="flex items-start gap-2 sm:gap-3 rounded-md px-1.5 py-0.5 text-left transition-all duration-200 w-full relative group"
                   style={{
                     background: isHighlighted
                       ? `${n.color}22`
@@ -654,34 +703,34 @@ export function GitGraph() {
                     boxShadow: isHighlighted ? `0 0 0 1px ${n.color}55` : "none",
                   }}
                 >
-                  {/* MILESTONE ROW EMPHASIS: Fades in a soft, low-opacity backdrop band reflecting branch colors */}
+                  {/* milestone row emphasis */}
                   {isMilestone && (
                     <motion.div
                       initial={{ opacity: 0 }}
                       whileInView={{ opacity: 0.04 }}
                       viewport={{ once: true, amount: 0.6 }}
                       transition={{ duration: 0.5, ease: "easeOut", delay: n.revealDelay }}
-                      className="absolute inset-y-0 -left-4 right-0 rounded-l-md pointer-events-none -z-[5]"
+                      className="absolute inset-y-0 -left-3 right-0 rounded-l-md pointer-events-none -z-[5]"
                       style={{ backgroundColor: n.color === "#ffffff" ? "#9ca3af" : n.color }}
                     />
                   )}
 
                   <div className="flex items-center gap-1.5 shrink-0 tabular-nums pt-[2px]">
-                    {/* 2. SEMANTIC ICONS: Prefixed dynamically according to the matched message criteria */}
                     <CommitIcon
                       message={n.message}
                       color={n.isHead ? "#34d399" : n.isMain ? "#9ca3af" : n.textColor}
                     />
-                    <span style={{ color: n.isHead ? "#34d399" : "#6b7280", fontSize: 12 }}>
+                    <span
+                      className="font-mono text-[11px] sm:text-[13px]"
+                      style={{ color: n.isHead ? "#34d399" : "#6b7280" }}
+                    >
                       {n.hash}
                     </span>
                   </div>
                   <span
-                    className="leading-snug break-words"
+                    className="leading-snug break-words text-[13px] sm:text-[14.5px] line-clamp-2 sm:line-clamp-none flex-1"
                     style={{
                       color: n.textColor,
-                      // MILESTONE ROW EMPHASIS: Gives milestone titles a slight relative font size lift
-                      fontSize: isMilestone ? 14 : 13,
                       fontWeight: n.isMain || n.isHead || isMilestone ? 500 : 400,
                       fontStyle: n.isBugfix ? "italic" : "normal",
                       opacity: n.isHead ? 0.9 : n.isMain ? 0.9 : 0.85,
@@ -702,13 +751,12 @@ export function GitGraph() {
       <style>{`
         .graph-ambient {
           background-image:
-            radial-gradient(circle at 15% 20%, rgba(245,158,11,0.035), transparent 45%),
-            radial-gradient(circle at 85% 55%, rgba(167,139,250,0.035), transparent 45%),
-            radial-gradient(circle at 25% 85%, rgba(52,211,153,0.035), transparent 45%);
+            radial-gradient(circle at 15% 20%, var(--amber-a, rgba(245,158,11,0.02)) 0%, transparent 50%),
+            radial-gradient(circle at 85% 55%, var(--purple-a, rgba(167,139,250,0.02)) 0%, transparent 50%),
+            radial-gradient(circle at 25% 85%, var(--green-a, rgba(52,211,153,0.02)) 0%, transparent 50%);
           background-size: 160% 160%;
           animation: graph-ambient-drift 24s ease-in-out infinite;
-          opacity: 0.65;
-          transition: background-color 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+          opacity: 0.85;
         }
         @keyframes graph-ambient-drift {
           0%, 100% { background-position: 0% 0%; }
