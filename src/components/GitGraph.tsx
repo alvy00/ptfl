@@ -347,12 +347,13 @@ export function GitGraph() {
           {/* nodes (visual only; interactive hitboxes are in HTML overlay) */}
           {allNodes.map((n) => {
             const isHovered = hovered === n.hash;
+            const isHighlighted = highlighted === n.hash;
             const baseR = n.isHead ? 7 : n.isMain ? 6 : n.isBugfix ? 4 : 5;
             return (
               <motion.g
                 key={n.hash}
                 initial={{ opacity: 0, scale: 0.4 }}
-                animate={{ opacity: 1, scale: isHovered ? 1.25 : 1 }}
+                animate={{ opacity: 1, scale: isHovered || isHighlighted ? 1.25 : 1 }}
                 transition={{ duration: 0.35, ease: "easeOut", delay: isHovered ? 0 : n.revealAt }}
                 style={{ transformOrigin: `${n.x}px ${n.y}px`, transformBox: "fill-box" as const }}
               >
@@ -367,13 +368,27 @@ export function GitGraph() {
                     transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
                   />
                 )}
-                {isHovered && !n.isHead && (
+                {isHighlighted && (
+                  <motion.circle
+                    cx={n.x}
+                    cy={n.y}
+                    r={baseR + 4}
+                    fill="none"
+                    stroke={n.color}
+                    strokeWidth={2}
+                    initial={{ r: baseR, opacity: 0.9 }}
+                    animate={{ r: baseR + 18, opacity: 0 }}
+                    transition={{ duration: 1.2, ease: "easeOut", repeat: 1 }}
+                    style={{ filter: `drop-shadow(0 0 10px ${n.color})` }}
+                  />
+                )}
+                {(isHovered || isHighlighted) && !n.isHead && (
                   <circle
                     cx={n.x}
                     cy={n.y}
                     r={baseR + 6}
                     fill={n.color}
-                    opacity={0.25}
+                    opacity={isHighlighted ? 0.4 : 0.25}
                     style={{ filter: `drop-shadow(0 0 8px ${n.color})` }}
                   />
                 )}
@@ -391,6 +406,7 @@ export function GitGraph() {
             );
           })}
         </svg>
+
 
         {/* Interactive overlay: row = hitbox for node + label */}
         <div className="absolute inset-0">
