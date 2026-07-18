@@ -40,12 +40,13 @@ export function AskProject({ projectKey, accent }: Props) {
       </div>
       <form
         onSubmit={onSubmit}
-        className="flex items-center gap-2 rounded-md border px-3 py-2"
+        className="flex items-center gap-2 rounded-md border px-3 py-2 backdrop-blur"
         style={{
           borderColor: `${accent}55`,
-          background: "rgba(0,0,0,0.35)",
+          background: "rgba(255,255,255,0.03)",
         }}
       >
+
         <span
           className="select-none text-[13px]"
           style={{ color: accent, textShadow: `0 0 8px ${accent}66` }}
