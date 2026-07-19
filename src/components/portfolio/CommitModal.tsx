@@ -392,7 +392,8 @@ function FeatureModal({
         <button
           onClick={onClose}
           aria-label="Close dialog"
-          className="absolute right-3 top-3.5 sm:right-4 sm:top-4 rounded-md px-2 py-1 text-xs sm:text-sm text-gray-400 hover:bg-white/5 hover:text-white z-20 bg-rgba(20,22,30,0.6) backdrop-blur-sm sm:backdrop-blur-none"
+          className="absolute right-3 top-3.5 sm:right-4 sm:top-4 rounded-md px-2 py-1 text-xs sm:text-sm text-gray-400 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 z-20 backdrop-blur-sm sm:backdrop-blur-none"
+          style={{ background: "rgba(20,22,30,0.6)" }}
         >
           ✕ <span className="hidden sm:inline">esc</span>
         </button>
