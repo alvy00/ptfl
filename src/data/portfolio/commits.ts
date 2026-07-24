@@ -4,8 +4,17 @@ export type CommitContent = { hash: string; message: string };
 
 export const mainCommitContent: CommitContent[] = [
   { hash: "a1b2c3d", message: "enroll: begin Chemical Engineering at RUET" },
-  { hash: "e4f5g6h", message: "learn: start self-teaching full-stack web development" },
-  { hash: "i7j8k9l", message: "apply: first internship application push" },
+  {
+    hash: "e4f5g6h",
+    message: "learn: React, HTML, CSS, Tailwind, Node.js, Framer Motion, and Express",
+  },
+  {
+    hash: "m1n2o3p",
+    message:
+      "achieve: placed 2nd individually and shipped a Category A project at a private bootcamp",
+  },
+  { hash: "q4r5s6t", message: "learn: Next.js and GSAP" },
+  { hash: "u7v8w9x", message: "learn: AI, LLMs, and RAG" },
   { hash: "HEAD", message: "open to internship / junior developer roles" },
 ];
 
