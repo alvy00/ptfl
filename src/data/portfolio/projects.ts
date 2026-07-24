@@ -1,4 +1,4 @@
-export type ProjectKey = "auctasync" | "assetverse" | "careerpilot";
+export type ProjectKey = "auctasync" | "assetverse" | "asynclangai" | "careerpilot";
 
 export type CodeLink = { label: string; url: string };
 
@@ -85,6 +85,35 @@ export const projects: Record<ProjectKey, Project> = {
     ],
     accent: "#a78bfa",
   },
+  asynclangai: {
+    key: "asynclangai",
+    name: "AsyncLangAI — English Language Practice Platform",
+    timeframe: { start: "2025-04-01", end: "2025-06-30", label: "Apr 2025 – Jun 2025" },
+    description:
+      "Built a full-stack English practice platform that solves the lack of real-time speaking practice by putting an AI conversational agent in the loop — giving learners a live partner to talk to, instant feedback on how they did, and concrete guidance on what to improve next.",
+    features: [
+      {
+        title: "Custom Virtual Interviews",
+        detail: "Create tailored mock interviews based on your specific roles and needs.",
+      },
+      {
+        title: "Real-Time AI Conversations",
+        detail: "Practice speaking fluidly with an interactive AI agent in real time.",
+      },
+      {
+        title: "Instant Performance Feedback",
+        detail: "Review detailed insights and analytics immediately following each session.",
+      },
+      {
+        title: "Targeted Guidance & Advice",
+        detail: "Receive actionable tips and recommendations to improve your communication skills.",
+      },
+    ],
+    stack: ["Next.js", "Node.js", "Express.js", "Firebase", "shadcn/ui", "Tailwind CSS"],
+    demoUrl: "https://asynclangai.vercel.app/",
+    codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/LangAI" }],
+    accent: "#38bdf8",
+  },
   careerpilot: {
     key: "careerpilot",
     name: "CareerPilot — AI Learning and Roadmap Generator",
@@ -123,9 +152,7 @@ export const projects: Record<ProjectKey, Project> = {
       "TanStack Query",
     ],
     demoUrl: "https://careerpilotasync.vercel.app/",
-    codeLinks: [
-      { label: "View Code", url: "https://github.com/alvy00/eg-careerpilot-asyncawait" },
-    ],
+    codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/eg-careerpilot-asyncawait" }],
     accent: "#34d399",
   },
 };

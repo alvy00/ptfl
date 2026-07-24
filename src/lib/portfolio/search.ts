@@ -6,6 +6,7 @@ import {
   mainCommitContent,
   auctasyncCommitContent,
   assetverseCommitContent,
+  asynclangaiCommitContent,
   careerpilotCommitContent,
   auctasyncBugfixCommitContent,
   careerpilotBugfixCommitContent,
@@ -33,9 +34,10 @@ const COMMITS: CommitMatch[] = [
   ...toMatches(mainCommitContent, "main", (hash) => (hash === "HEAD" ? "#34d399" : "#ffffff")),
   ...toMatches(auctasyncCommitContent, "feat/auctasync", () => "#f59e0b"),
   ...toMatches(assetverseCommitContent, "feat/assetverse", () => "#a78bfa"),
+  ...toMatches(asynclangaiCommitContent, "feat/asynclangai", () => "#38bdf8"),
   ...toMatches(careerpilotCommitContent, "feat/careerpilot", () => "#34d399"),
-  ...toMatches(auctasyncBugfixCommitContent, "bugfix/auctasync-race-condition", () => "#f59e0b"),
-  ...toMatches(careerpilotBugfixCommitContent, "bugfix/careerpilot-session-state", () => "#34d399"),
+  ...toMatches(auctasyncBugfixCommitContent, "bugfix/auctasync-race-condition", () => "#fb7185"),
+  ...toMatches(careerpilotBugfixCommitContent, "bugfix/careerpilot-session-state", () => "#fb7185"),
 ];
 
 // Additional searchable surface: project titles, descriptions, tags, and
@@ -43,7 +45,7 @@ const COMMITS: CommitMatch[] = [
 // pull the AuctaSync commits even if the word isn't in every message.
 function extendedHaystack(c: CommitMatch): string {
   const parts: string[] = [c.hash, c.message, c.branch];
-  const key = (["auctasync", "assetverse", "careerpilot"] as ProjectKey[]).find(
+  const key = (["auctasync", "assetverse", "asynclangai", "careerpilot"] as ProjectKey[]).find(
     (k) =>
       c.branch === `feat/${k}` ||
       c.branch === `bugfix/${k}-race-condition` ||

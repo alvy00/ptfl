@@ -47,6 +47,25 @@ export const assetverseCommitContent: CommitContent[] = [
   },
 ];
 
+export const asynclangaiCommitContent: CommitContent[] = [
+  {
+    hash: "l1a2n3g",
+    message: "feat(asynclangai): scaffold real-time English practice platform",
+  },
+  {
+    hash: "l4a5n6g",
+    message: "feat(asynclangai): implement real-time AI conversation engine for spoken practice",
+  },
+  {
+    hash: "l7a8n9g",
+    message: "feat(asynclangai): build custom virtual interviews and instant feedback engine",
+  },
+  {
+    hash: "l0a1n2g",
+    message: "feat(asynclangai): milestone — live AI conversation + feedback loop shipped",
+  },
+];
+
 export const careerpilotCommitContent: CommitContent[] = [
   {
     hash: "c1d2e3f",
