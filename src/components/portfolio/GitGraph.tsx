@@ -51,12 +51,18 @@ const GRAPH_W = MAIN_X + LANE_W * TOTAL_LANES;
 const yOf = (row: number) => TOP_PAD + row * ROW_H;
 const laneX = (lane: number) => MAIN_X + lane * LANE_W;
 
-const MAIN_ROWS = [0, 1, 8, 19];
-const AUCTASYNC_ROWS = [2, 3, 6, 7];
-const ASSETVERSE_ROWS = [9, 10, 11, 12];
-const CAREERPILOT_ROWS = [13, 14, 15, 18];
-const AUCTASYNC_BUGFIX_ROWS = [4, 5];
-const CAREERPILOT_BUGFIX_ROWS = [16, 17];
+// Row plan (22 rows total, 0-21), verified programmatically for full
+// coverage with no gaps/collisions before this was written:
+// 0 enroll | 1 learn(react/html/css/tailwind/node/framer/express)
+// 2-5 AssetVerse | 6 achieve(bootcamp) | 7 learn(nextjs/gsap)
+// 8-13 AuctaSync (10-11 = its bugfix) | 14 learn(ai/llm/rag)
+// 15-20 CareerPilot (18-19 = its bugfix) | 21 HEAD
+const MAIN_ROWS = [0, 1, 6, 7, 14, 21];
+const ASSETVERSE_ROWS = [2, 3, 4, 5];
+const AUCTASYNC_ROWS = [8, 9, 12, 13];
+const AUCTASYNC_BUGFIX_ROWS = [10, 11];
+const CAREERPILOT_ROWS = [15, 16, 17, 20];
+const CAREERPILOT_BUGFIX_ROWS = [18, 19];
 
 const withRows = (content: Commit[], rows: number[]): (Commit & { row: number })[] =>
   content.map((c, i) => ({ ...c, row: rows[i] }));
@@ -65,32 +71,32 @@ const mainCommits: MainCommit[] = withRows(mainCommitContent, MAIN_ROWS);
 
 const branches: Branch[] = [
   {
-    name: "feat/auctasync",
-    projectKey: "auctasync",
-    color: "#f59e0b",
-    lane: 1,
-    sourceY: yOf(1) + 22,
-    mergeY: yOf(8) - 22,
-    delay: 1.0,
-    commits: withRows(auctasyncCommitContent, AUCTASYNC_ROWS),
-  },
-  {
     name: "feat/assetverse",
     projectKey: "assetverse",
     color: "#a78bfa",
-    lane: 3,
-    sourceY: yOf(8) + 22,
-    mergeY: yOf(12) + 28,
-    delay: 1.5,
+    lane: 1,
+    sourceY: yOf(1) + 27,
+    mergeY: yOf(6) - 27,
+    delay: 1.0,
     commits: withRows(assetverseCommitContent, ASSETVERSE_ROWS),
+  },
+  {
+    name: "feat/auctasync",
+    projectKey: "auctasync",
+    color: "#f59e0b",
+    lane: 2,
+    sourceY: yOf(7) + 27,
+    mergeY: yOf(14) - 27,
+    delay: 1.5,
+    commits: withRows(auctasyncCommitContent, AUCTASYNC_ROWS),
   },
   {
     name: "feat/careerpilot",
     projectKey: "careerpilot",
     color: "#34d399",
     lane: 4,
-    sourceY: yOf(13) - 28,
-    mergeY: yOf(18) + 28,
+    sourceY: yOf(14) + 27,
+    mergeY: yOf(21) - 27,
     delay: 2.0,
     commits: withRows(careerpilotCommitContent, CAREERPILOT_ROWS),
   },
@@ -101,10 +107,10 @@ const bugfixBranches: BugfixBranch[] = [
     name: "bugfix/auctasync-race-condition",
     bugfixKey: "auctasync-race-condition",
     color: "#f59e0b",
-    parentLane: 1,
-    lane: 2,
-    sourceY: yOf(3) + 20,
-    mergeY: yOf(6) - 20,
+    parentLane: 2,
+    lane: 3,
+    sourceY: yOf(9) + 24,
+    mergeY: yOf(12) - 24,
     delay: 1.4,
     commits: withRows(auctasyncBugfixCommitContent, AUCTASYNC_BUGFIX_ROWS),
   },
@@ -114,14 +120,14 @@ const bugfixBranches: BugfixBranch[] = [
     color: "#34d399",
     parentLane: 4,
     lane: 5,
-    sourceY: yOf(15) + 20,
-    mergeY: yOf(18) - 20,
+    sourceY: yOf(17) + 24,
+    mergeY: yOf(20) - 24,
     delay: 2.4,
     commits: withRows(careerpilotBugfixCommitContent, CAREERPILOT_BUGFIX_ROWS),
   },
 ];
 
-const TOTAL_ROWS = 20;
+const TOTAL_ROWS = 22;
 const HEIGHT = TOP_PAD * 2 + (TOTAL_ROWS - 1) * ROW_H;
 
 const TOTAL_COMMIT_COUNT =
@@ -343,31 +349,35 @@ export function GitGraph() {
     mass: 0.5,
   });
 
-  const amberGlow = useTransform(
+  // Windows recalculated from each branch's actual row span as a fraction
+  // of TOTAL_ROWS-1 (=21), with a small ramp-in/out pad — same approach as
+  // before, just re-ordered: AssetVerse (purple) now forks first, AuctaSync
+  // (amber) second, CareerPilot (green) stays last.
+  const purpleGlow = useTransform(
     smoothProgress,
-    [0.0, 0.08, 0.35, 0.42],
+    [0.0, 0.06, 0.26, 0.33],
     [
-      "rgba(245,158,11,0.02)",
-      "rgba(245,158,11,0.09)",
-      "rgba(245,158,11,0.09)",
-      "rgba(245,158,11,0.02)",
+      "rgba(167,139,250,0.02)",
+      "rgba(167,139,250,0.09)",
+      "rgba(167,139,250,0.09)",
+      "rgba(167,139,250,0.02)",
     ],
   );
 
-  const purpleGlow = useTransform(
+  const amberGlow = useTransform(
     smoothProgress,
-    [0.38, 0.5, 0.68, 0.75],
+    [0.33, 0.4, 0.65, 0.72],
     [
-      "rgba(167,139,250,0.02)",
-      "rgba(167,139,250,0.09)",
-      "rgba(167,139,250,0.09)",
-      "rgba(167,139,250,0.02)",
+      "rgba(245,158,11,0.02)",
+      "rgba(245,158,11,0.09)",
+      "rgba(245,158,11,0.09)",
+      "rgba(245,158,11,0.02)",
     ],
   );
 
   const greenGlow = useTransform(
     smoothProgress,
-    [0.68, 0.78, 0.92, 0.98],
+    [0.7, 0.78, 0.98, 1.0],
     [
       "rgba(52,211,153,0.02)",
       "rgba(52,211,153,0.09)",

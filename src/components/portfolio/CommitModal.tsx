@@ -305,7 +305,11 @@ function FeatureModal({
           <h3 id={titleId} className="text-lg sm:text-xl font-semibold text-white leading-tight">
             {project.name}
           </h3>
-          <p className="mt-1 text-[11px] sm:text-[13px] text-gray-400">{project.timeframe.label}</p>
+          {selection.projectKey !== "assetverse" && (
+            <p className="mt-1 text-[11px] sm:text-[13px] text-gray-400">
+              {project.timeframe.label}
+            </p>
+          )}
           <p className="mt-3 text-[14px] sm:text-[15.5px] leading-relaxed text-gray-300 font-sans break-words">
             {project.description}
           </p>
