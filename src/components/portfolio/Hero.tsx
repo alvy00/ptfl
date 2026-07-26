@@ -10,7 +10,8 @@ import {
 } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import type { MouseEvent as ReactMouseEvent, ReactNode, CSSProperties } from "react";
-import { Github, Linkedin, ArrowUpRight, FileDown } from "lucide-react";
+import { ArrowUpRight, FileDown } from "lucide-react";
+import { FaGithub, FaLinkedin } from "react-icons/fa";
 import { FileTab } from "./FileTab";
 import { theme } from "@/lib/portfolio/theme";
 import {
@@ -45,9 +46,9 @@ const ROLE_TAGLINE = "Full-Stack Developer";
 
 // Replace these with your real profile URLs / resume file path.
 const SOCIAL_LINKS = {
-  github: "https://github.com/",
-  linkedin: "https://linkedin.com/in/",
-  resume: "/resume.pdf",
+  github: "https://github.com/alvy00",
+  linkedin: "https://linkedin.com/in/alvy00",
+  resume: "https://drive.google.com/file/d/1zGCxzbQpefrQmL6c9Zr1VkU0n8Ouh6-E/view?usp=sharing",
 };
 
 // Low-opacity fractal-noise texture for a tactile "frosted glass" feel on
@@ -387,7 +388,7 @@ export function Hero() {
                   background: "rgba(255,255,255,0.03)",
                 }}
               >
-                <Github className="h-4 w-4" />
+                <FaGithub className="h-4 w-4" />
               </motion.a>
 
               <motion.a
@@ -403,7 +404,7 @@ export function Hero() {
                   background: "rgba(255,255,255,0.03)",
                 }}
               >
-                <Linkedin className="h-4 w-4" />
+                <FaLinkedin className="h-4 w-4" />
               </motion.a>
             </motion.div>
           </div>
