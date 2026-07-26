@@ -1,0 +1,147 @@
+import { motion } from "framer-motion";
+
+import { PALETTE } from "@/lib/portfolio/gitGraphData";
+import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
+
+export function GitGraphNode({
+  n,
+  isHovered,
+  isHighlighted,
+  dimmed,
+  nodeScale,
+  reduceMotion,
+}: {
+  n: NodeMeta;
+  isHovered: boolean;
+  isHighlighted: boolean;
+  dimmed: boolean;
+  nodeScale: number;
+  reduceMotion: boolean;
+}) {
+  const baseR = (n.isHead ? 7.5 : n.isMain ? 6.5 : n.isBugfix ? 4.5 : 5.5) * nodeScale;
+
+  // Trunk "learn"/"achieve" milestones get a sonar pulse to draw the eye.
+  // Deliberately a different concept from `isMilestone` in
+  // GitGraphCommitRow (that one means "message contains the literal word
+  // 'milestone'", for feature-branch commits like "feat(auctasync):
+  // milestone — ..." — unrelated, just a name collision to watch for).
+  const lowerMsg = n.message.toLowerCase();
+  const isTrunkHighlight =
+    n.isMain && !n.isHead && (lowerMsg.includes("learn") || lowerMsg.includes("achieve"));
+
+  const nodeIdleTransition = (delay: number) =>
+    reduceMotion ? { duration: 0.01 } : { duration: 0.35, ease: "easeOut" as const, delay };
+  const nodeActiveTransition = reduceMotion
+    ? { duration: 0.01 }
+    : { type: "spring" as const, stiffness: 300, damping: 20 };
+  const dimTransition = reduceMotion ? { duration: 0.01 } : { duration: 0.25, ease: "easeOut" as const };
+
+  return (
+    <motion.g
+      initial={{ opacity: 0, scale: 0.4 }}
+      whileInView={{ opacity: 1, scale: 1 }}
+      viewport={{ once: true, amount: 0.6 }}
+      animate={{
+        scale: isHovered || isHighlighted ? 1.25 : 1,
+        opacity: dimmed ? 0.3 : 1,
+      }}
+      transition={{
+        scale: isHovered || isHighlighted ? nodeActiveTransition : nodeIdleTransition(n.revealDelay),
+        opacity: dimTransition,
+      }}
+      style={{ transformOrigin: `${n.x}px ${n.y}px`, willChange: "transform, opacity" }}
+    >
+      {n.isHead && (
+        <motion.circle
+          cx={n.x}
+          cy={n.y}
+          r={12.5 * nodeScale}
+          fill={PALETTE.head}
+          opacity={0.35}
+          animate={
+            reduceMotion
+              ? { opacity: 0.3 }
+              : { r: [12.5 * nodeScale, 20 * nodeScale, 12.5 * nodeScale], opacity: [0.45, 0.05, 0.45] }
+          }
+          transition={
+            reduceMotion ? { duration: 0.01 } : { duration: 2, repeat: Infinity, ease: "easeInOut" }
+          }
+          style={{ willChange: "transform, opacity" }}
+        />
+      )}
+      {isHighlighted && (
+        <motion.circle
+          cx={n.x}
+          cy={n.y}
+          r={baseR + 4}
+          fill="none"
+          stroke={n.color}
+          strokeWidth={2}
+          initial={{ r: baseR, opacity: 0.9 }}
+          animate={{ r: baseR + 18, opacity: 0 }}
+          transition={reduceMotion ? { duration: 0.2 } : { duration: 1.2, ease: "easeOut", repeat: 1 }}
+          style={{ filter: `drop-shadow(0 0 8px ${n.color})`, willChange: "transform, opacity" }}
+        />
+      )}
+      {(isHovered || isHighlighted) && !n.isHead && (
+        <circle
+          cx={n.x}
+          cy={n.y}
+          r={baseR + 5}
+          fill={n.color}
+          opacity={isHighlighted ? 0.4 : 0.25}
+          style={{ filter: `drop-shadow(0 0 6px ${n.color})` }}
+        />
+      )}
+      {isTrunkHighlight && (
+        <motion.circle
+          cx={n.x}
+          cy={n.y}
+          r={baseR}
+          fill="none"
+          stroke={PALETTE.mainText}
+          strokeWidth={1.5}
+          initial={{ scale: 1, opacity: 0.8 }}
+          whileInView={reduceMotion ? { scale: 1, opacity: 0.5 } : { scale: 2.2, opacity: 0 }}
+          viewport={{ once: true, amount: 0.6 }}
+          transition={
+            reduceMotion
+              ? { duration: 0.01 }
+              : {
+                  duration: 1.5,
+                  ease: "easeOut",
+                  repeat: Infinity,
+                  repeatDelay: 1,
+                  delay: n.revealDelay, // slight per-node stagger so trunk pulses aren't all in lockstep
+                }
+          }
+          style={{ transformOrigin: `${n.x}px ${n.y}px`, willChange: "transform, opacity" }}
+        />
+      )}
+      {n.isBugfix ? (
+        <rect
+          x={n.x - baseR * 0.85}
+          y={n.y - baseR * 0.85}
+          width={baseR * 1.7}
+          height={baseR * 1.7}
+          rx={1.5}
+          transform={`rotate(45 ${n.x} ${n.y})`}
+          fill={PALETTE.bg}
+          stroke={n.color}
+          strokeWidth={1.75}
+          strokeDasharray="2 1.5"
+        />
+      ) : (
+        <circle
+          cx={n.x}
+          cy={n.y}
+          r={baseR}
+          fill={PALETTE.bg}
+          stroke={n.isHead ? PALETTE.head : n.color}
+          strokeWidth={n.isHead ? 2.5 : 2}
+          filter={n.isHead ? "url(#head-glow)" : undefined}
+        />
+      )}
+    </motion.g>
+  );
+}

@@ -10,632 +10,57 @@ import {
 import { useEffect, useRef, useState, useMemo, type MouseEvent } from "react";
 
 import { CommitModal, type CommitSelection } from "./CommitModal";
-import type { ProjectKey } from "@/data/portfolio/projects";
-import { type BugfixKey } from "@/data/portfolio/bugfixes";
+import { GitGraphScrollProgress } from "./GitGraphScrollProgress";
+import { GitGraphAmbientGlow } from "./GitGraphAmbientGlow";
+import { GitGraphLegend } from "./GitGraphLegend";
+import { GitGraphNode } from "./GitGraphNode";
+import { GitGraphCommitRow } from "./GitGraphCommitRow";
+
 import {
-  mainCommitContent,
-  auctasyncCommitContent,
-  assetverseCommitContent,
-  asynclangaiCommitContent,
-  careerpilotCommitContent,
-  auctasyncBugfixCommitContent,
-  careerpilotBugfixCommitContent,
-} from "@/data/portfolio/commits";
-
-type Commit = { hash: string; message: string };
-type MainCommit = Commit & { row: number };
-
-type BranchDef = {
-  name: string;
-  projectKey: ProjectKey;
-  color: string;
-  lane: number;
-  sourceRow: number;
-  mergeRow: number;
-  delay: number;
-  commits: (Commit & { row: number })[];
-};
-
-type BugfixDef = {
-  name: string;
-  bugfixKey: BugfixKey;
-  parentLane: number;
-  lane: number;
-  sourceRow: number;
-  mergeRow: number;
-  delay: number;
-  commits: (Commit & { row: number })[];
-};
-
-// ---------------------------------------------------------------------------
-// Layout: fully fluid across screen sizes instead of one fixed pixel grid.
-// The graph's row/lane *topology* (who forks from whom, on which row) never
-// changes — only the pixel spacing scales per tier, computed in
-// buildGeometry() below. This replaces the old approach of a fixed-width SVG
-// that relied on the parent page forcing a horizontal scrollbar on mobile.
-// ---------------------------------------------------------------------------
-type Tier = "xs" | "sm" | "md" | "lg";
-
-type Layout = {
-  rowH: number;
-  topPad: number;
-  mainX: number;
-  laneW: number;
-  nodeScale: number;
-};
-
-const LAYOUTS: Record<Tier, Layout> = {
-  xs: { rowH: 56, topPad: 40, mainX: 12, laneW: 17, nodeScale: 0.8 }, // <400px
-  sm: { rowH: 60, topPad: 44, mainX: 16, laneW: 23, nodeScale: 0.88 }, // 400-639px
-  md: { rowH: 66, topPad: 48, mainX: 20, laneW: 30, nodeScale: 0.96 }, // 640-1023px
-  lg: { rowH: 68, topPad: 52, mainX: 24, laneW: 34, nodeScale: 1 }, // 1024px+
-};
-
-function getTier(width: number): Tier {
-  if (width < 400) return "xs";
-  if (width < 640) return "sm";
-  if (width < 1024) return "md";
-  return "lg";
-}
-
-/**
- * Reads the viewport tier client-side only. Starts at "lg" (the SSR-safe
- * default) so the first client render matches the server-rendered markup
- * exactly — avoiding hydration mismatches — then corrects itself in an
- * effect once `window` is available. Resize handling is rAF-throttled so
- * dragging a browser window doesn't spam re-renders.
- */
-function useLayoutTier(): Tier {
-  const [tier, setTier] = useState<Tier>("lg");
-
-  useEffect(() => {
-    let frame = 0;
-    const measure = () => setTier(getTier(window.innerWidth));
-    const onResize = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(measure);
-    };
-    measure();
-    window.addEventListener("resize", onResize);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", onResize);
-    };
-  }, []);
-
-  return tier;
-}
-
-/** True on touch/coarse-pointer devices. Used to tune scroll-spring physics
- *  — touch scrolling already has its own momentum from the OS, so a lower
- *  mass / snappier spring here avoids the motion feeling like it's dragging
- *  half a second behind the user's finger. */
-function usePointerCoarse(): boolean {
-  const [coarse, setCoarse] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(pointer: coarse)");
-    setCoarse(mq.matches);
-    const onChange = (e: MediaQueryListEvent) => setCoarse(e.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
-
-  return coarse;
-}
-
-// Fixed offsets (in the old code: +27 / -27 and +24 / -24) expressed as a
-// ratio of row height instead, so they scale with the layout tier too.
-const FEATURE_OFFSET_RATIO = 27 / 68;
-const BUGFIX_OFFSET_RATIO = 24 / 68;
-
-// Bugfix branches always use this color, regardless of which project they
-// belong to — color now encodes "what kind of branch is this" (project vs.
-// fix), not project identity, so a fix is recognizable at a glance no
-// matter which project it's on.
-const BUGFIX_COLOR = "#fb7185";
-
-// Single source of truth for every color used in this component — branch
-// accents, their lighter in-graph text variants, and the fixed head/bugfix
-// colors. Everything below (BRANCH_DEFS, node text color, ambient glow,
-// legend, scroll-progress gradient) reads from here instead of repeating
-// hex literals.
-const PALETTE = {
-  bg: "#0e0f13",
-  mainLine: "#ffffff",
-  mainText: "#e2e4e9",
-  head: "#34d399",
-  bugfix: BUGFIX_COLOR,
-  projects: {
-    assetverse: { accent: "#a78bfa", text: "#a28ded" },
-    auctasync: { accent: "#f59e0b", text: "#de9722" },
-    asynclangai: { accent: "#38bdf8", text: "#7dd3fc" },
-    careerpilot: { accent: "#34d399", text: "#3cdbb1" },
-  },
-} as const satisfies {
-  bg: string;
-  mainLine: string;
-  mainText: string;
-  head: string;
-  bugfix: string;
-  projects: Record<ProjectKey, { accent: string; text: string }>;
-};
-
-function hexToRgbTriplet(hex: string): string {
-  const h = hex.replace("#", "");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return `${r}, ${g}, ${b}`;
-}
-
-/** Scroll-progress window [rampInStart, rampInEnd, rampOutStart, rampOutEnd]
- *  derived from a branch's actual source/merge rows, instead of hand-tuned
- *  fractions — so it can never drift out of sync with the row plan. */
-function branchGlowWindow(sourceRow: number, mergeRow: number, pad = 0.03): number[] {
-  const start = sourceRow / (TOTAL_ROWS - 1);
-  const end = mergeRow / (TOTAL_ROWS - 1);
-  return [Math.max(0, start - pad), start, end, Math.min(1, end + pad)];
-}
-
-function glowStops(hex: string): string[] {
-  const rgb = hexToRgbTriplet(hex);
-  return [`rgba(${rgb},0.02)`, `rgba(${rgb},0.09)`, `rgba(${rgb},0.09)`, `rgba(${rgb},0.02)`];
-}
-
-function branchByProject(key: ProjectKey): BranchDef {
-  const b = BRANCH_DEFS.find((d) => d.projectKey === key);
-  if (!b) throw new Error(`No branch defined for project "${key}"`);
-  return b;
-}
-
-/** Two-point domain for scroll-scrubbed path drawing: the branch is fully
- *  undrawn before `sourceRow` (minus a small lead-in) and fully drawn by
- *  `mergeRow`. useTransform clamps outside this range by default, so no
- *  extra endpoints are needed the way the glow windows use. Because this
- *  is a plain function of scroll position (not a one-shot whileInView),
- *  scrolling back up smoothly erases the branch again. */
-function drawRange(sourceRow: number, mergeRow: number, pad = 0.02): [number, number] {
-  const start = sourceRow / (TOTAL_ROWS - 1);
-  const end = mergeRow / (TOTAL_ROWS - 1);
-  return [Math.max(0, start - pad), end];
-}
-
-const TOTAL_LANES = 7;
-const TOTAL_ROWS = 26;
-
-// Row plan (26 rows total, 0-25), verified for full coverage with no
-// gaps/collisions before this was written:
-// 0 enroll | 1 learn(react/html/css/tailwind/node/framer/express)
-// 2-5 AssetVerse | 6 achieve(bootcamp) | 7 learn(nextjs/gsap)
-// 8-13 AuctaSync (10-11 = its bugfix) | 14 learn(ai/llm/rag)
-// 15-18 AsyncLangAI | 19-24 CareerPilot (22-23 = its bugfix) | 25 HEAD
-const MAIN_ROWS = [0, 1, 6, 7, 14, 25];
-const ASSETVERSE_ROWS = [2, 3, 4, 5];
-const AUCTASYNC_ROWS = [8, 9, 12, 13];
-const AUCTASYNC_BUGFIX_ROWS = [10, 11];
-const ASYNCLANGAI_ROWS = [15, 16, 17, 18];
-const CAREERPILOT_ROWS = [19, 20, 21, 24];
-const CAREERPILOT_BUGFIX_ROWS = [22, 23];
-
-const withRows = (content: Commit[], rows: number[]): (Commit & { row: number })[] =>
-  content.map((c, i) => ({ ...c, row: rows[i] }));
-
-const mainCommits: MainCommit[] = withRows(mainCommitContent, MAIN_ROWS);
-
-// Topology only (no pixel values) — stays constant across tiers.
-const BRANCH_DEFS: BranchDef[] = [
-  {
-    name: "feat/assetverse",
-    projectKey: "assetverse",
-    color: PALETTE.projects.assetverse.accent,
-    lane: 1,
-    sourceRow: 1,
-    mergeRow: 6,
-    delay: 1.0,
-    commits: withRows(assetverseCommitContent, ASSETVERSE_ROWS),
-  },
-  {
-    name: "feat/auctasync",
-    projectKey: "auctasync",
-    color: PALETTE.projects.auctasync.accent,
-    lane: 2,
-    sourceRow: 7,
-    mergeRow: 14,
-    delay: 1.5,
-    commits: withRows(auctasyncCommitContent, AUCTASYNC_ROWS),
-  },
-  {
-    name: "feat/asynclangai",
-    projectKey: "asynclangai",
-    color: PALETTE.projects.asynclangai.accent,
-    lane: 4,
-    sourceRow: 14,
-    mergeRow: 19,
-    delay: 1.75,
-    commits: withRows(asynclangaiCommitContent, ASYNCLANGAI_ROWS),
-  },
-  {
-    name: "feat/careerpilot",
-    projectKey: "careerpilot",
-    color: PALETTE.projects.careerpilot.accent,
-    lane: 5,
-    sourceRow: 19,
-    mergeRow: 25,
-    delay: 2.0,
-    commits: withRows(careerpilotCommitContent, CAREERPILOT_ROWS),
-  },
-];
-
-const BUGFIX_DEFS: BugfixDef[] = [
-  {
-    name: "bugfix/auctasync-race-condition",
-    bugfixKey: "auctasync-race-condition",
-    parentLane: 2,
-    lane: 3,
-    sourceRow: 9,
-    mergeRow: 12,
-    delay: 1.4,
-    commits: withRows(auctasyncBugfixCommitContent, AUCTASYNC_BUGFIX_ROWS),
-  },
-  {
-    name: "bugfix/careerpilot-session-state",
-    bugfixKey: "careerpilot-session-state",
-    parentLane: 5,
-    lane: 6,
-    sourceRow: 21,
-    mergeRow: 24,
-    delay: 2.4,
-    commits: withRows(careerpilotBugfixCommitContent, CAREERPILOT_BUGFIX_ROWS),
-  },
-];
-
-const TOTAL_COMMIT_COUNT =
-  mainCommits.length +
-  BRANCH_DEFS.reduce((sum, b) => sum + b.commits.length, 0) +
-  BUGFIX_DEFS.reduce((sum, b) => sum + b.commits.length, 0);
-
-type NodeMeta = {
-  x: number;
-  y: number;
-  hash: string;
-  message: string;
-  color: string;
-  textColor: string;
-  isHead?: boolean;
-  isMain?: boolean;
-  isBugfix?: boolean;
-  revealDelay: number;
-  projectKey?: ProjectKey;
-  commitIndex?: number;
-  commitTotal?: number;
-  bugfixKey?: BugfixKey;
-  bugfixCommitIndex?: number;
-  branchName?: string;
-  /** Which branch this node belongs to, for hover-focus dimming of siblings.
-   *  "main" for trunk commits, the branch name (e.g. "feat/auctasync") for
-   *  everything else — a bugfix node's group is its *parent* feature branch,
-   *  so hovering either highlights both together. */
-  branchGroup: string;
-};
-
-/** All pixel geometry derived from a Layout — rebuilt only when the tier changes. */
-function buildGeometry(layout: Layout) {
-  const { rowH, topPad, mainX, laneW } = layout;
-  const yOf = (row: number) => topPad + row * rowH;
-  const laneX = (lane: number) => mainX + lane * laneW;
-  const graphW = mainX + laneW * TOTAL_LANES;
-  const height = topPad * 2 + (TOTAL_ROWS - 1) * rowH;
-  const featureOffset = rowH * FEATURE_OFFSET_RATIO;
-  const bugfixOffset = rowH * BUGFIX_OFFSET_RATIO;
-
-  const branches = BRANCH_DEFS.map((b) => ({
-    ...b,
-    sourceY: yOf(b.sourceRow) + featureOffset,
-    mergeY: yOf(b.mergeRow) - featureOffset,
-  }));
-
-  const bugfixBranches = BUGFIX_DEFS.map((b) => ({
-    ...b,
-    sourceY: yOf(b.sourceRow) + bugfixOffset,
-    mergeY: yOf(b.mergeRow) - bugfixOffset,
-  }));
-
-  const branchPath = (b: (typeof branches)[number]): string => {
-    const bx = laneX(b.lane);
-    const firstY = yOf(b.commits[0].row);
-    const lastY = yOf(b.commits[b.commits.length - 1].row);
-    const c1 = (firstY - b.sourceY) / 2;
-    const c2 = (b.mergeY - lastY) / 2;
-    return [
-      `M ${mainX} ${b.sourceY}`,
-      `C ${mainX} ${b.sourceY + c1}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
-      `L ${bx} ${lastY}`,
-      `C ${bx} ${lastY + c2}, ${mainX} ${b.mergeY - c2}, ${mainX} ${b.mergeY}`,
-    ].join(" ");
-  };
-
-  const bugfixPath = (b: (typeof bugfixBranches)[number]): string => {
-    const px = laneX(b.parentLane);
-    const bx = laneX(b.lane);
-    const firstY = yOf(b.commits[0].row);
-    const lastY = yOf(b.commits[b.commits.length - 1].row);
-    const c1 = (firstY - b.sourceY) / 2;
-    const c2 = (b.mergeY - lastY) / 2;
-    return [
-      `M ${px} ${b.sourceY}`,
-      `C ${px} ${b.sourceY + c1}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
-      `L ${bx} ${lastY}`,
-      `C ${bx} ${lastY + c2}, ${px} ${b.mergeY - c2}, ${px} ${b.mergeY}`,
-    ].join(" ");
-  };
-
-  // Lane -> branch name, so a bugfix branch can look up which feature
-  // branch it forked from (used for branchGroup below).
-  const laneToBranchName = new Map(branches.map((b) => [b.lane, b.name]));
-
-  const allNodes: NodeMeta[] = [
-    ...mainCommits.map((c, i) => ({
-      x: mainX,
-      y: yOf(c.row),
-      hash: c.hash,
-      message: c.message,
-      color: PALETTE.mainLine,
-      textColor: c.hash === "HEAD" ? PALETTE.head : PALETTE.mainText,
-      isHead: c.hash === "HEAD",
-      isMain: true,
-      revealDelay: i * 0.06,
-      branchGroup: "main",
-    })),
-    ...branches.flatMap((b, bi) =>
-      b.commits.map((c, i) => ({
-        x: laneX(b.lane),
-        y: yOf(c.row),
-        hash: c.hash,
-        message: c.message,
-        color: b.color,
-        textColor: PALETTE.projects[b.projectKey].text,
-        revealDelay: bi * 0.1 + i * 0.06,
-        projectKey: b.projectKey,
-        commitIndex: i,
-        commitTotal: b.commits.length,
-        branchName: i === 0 ? b.name : undefined,
-        branchGroup: b.name,
-      })),
-    ),
-    ...bugfixBranches.flatMap((b, bi) =>
-      b.commits.map((c, i) => ({
-        x: laneX(b.lane),
-        y: yOf(c.row),
-        hash: c.hash,
-        message: c.message,
-        color: BUGFIX_COLOR,
-        textColor: BUGFIX_COLOR,
-        isBugfix: true,
-        revealDelay: bi * 0.1 + i * 0.06,
-        bugfixKey: b.bugfixKey,
-        bugfixCommitIndex: i,
-        branchName: i === 0 ? b.name : undefined,
-        branchGroup: laneToBranchName.get(b.parentLane) ?? b.name,
-      })),
-    ),
-  ];
-
-  return { yOf, laneX, graphW, height, branches, bugfixBranches, branchPath, bugfixPath, allNodes };
-}
-
-function ScrollProgress({
-  progress,
-}: {
-  progress: ReturnType<typeof useTransform<number, number>>;
-}) {
-  // Written directly to the DOM instead of through useState — this fires on
-  // every scroll tick, and routing it through React state would re-render
-  // the whole subtree on every pixel of scroll. A screen reader doesn't
-  // need this number narrated in real time either, so the label below is
-  // static rather than trying to keep aria-live in sync with a fast-moving
-  // value (which would just spam announcements).
-  const countRef = useRef<HTMLSpanElement>(null);
-
-  useMotionValueEvent(progress, "change", (v) => {
-    const count = Math.min(TOTAL_COMMIT_COUNT, Math.max(0, Math.round(v * TOTAL_COMMIT_COUNT)));
-    if (countRef.current) countRef.current.textContent = String(count);
-  });
-
-  return (
-    <>
-      <motion.div
-        aria-hidden="true"
-        className="fixed left-0 top-0 z-[60] h-[3px] origin-left"
-        style={{
-          scaleX: progress,
-          width: "100%",
-          background: `linear-gradient(90deg, ${PALETTE.projects.assetverse.accent}, ${PALETTE.projects.auctasync.accent}, ${PALETTE.projects.asynclangai.accent}, ${PALETTE.projects.careerpilot.accent})`,
-          boxShadow: "0 0 8px rgba(255,255,255,0.35)",
-          willChange: "transform",
-        }}
-      />
-      <div
-        aria-label="Scroll progress through the commit history"
-        className="fixed right-2 top-2 sm:right-4 sm:top-3 z-[60] rounded px-1.5 py-0.5 sm:px-2 font-mono text-[10px] sm:text-[12px] tabular-nums tracking-widest text-gray-500"
-        style={{
-          background: "rgba(14,15,19,0.6)",
-          backdropFilter: "blur(6px)",
-          top: "max(0.5rem, env(safe-area-inset-top))",
-        }}
-      >
-        <span ref={countRef}>0</span> / {TOTAL_COMMIT_COUNT}
-      </div>
-    </>
-  );
-}
-
-function AmbientGlow({
-  purple,
-  amber,
-  cyan,
-  green,
-  reduceMotion,
-}: {
-  purple: ReturnType<typeof useTransform<number, string>>;
-  amber: ReturnType<typeof useTransform<number, string>>;
-  cyan: ReturnType<typeof useTransform<number, string>>;
-  green: ReturnType<typeof useTransform<number, string>>;
-  reduceMotion: boolean;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  useMotionValueEvent(purple, "change", (v) => {
-    ref.current?.style.setProperty("--purple-a", v);
-  });
-  useMotionValueEvent(amber, "change", (v) => {
-    ref.current?.style.setProperty("--amber-a", v);
-  });
-  useMotionValueEvent(cyan, "change", (v) => {
-    ref.current?.style.setProperty("--cyan-a", v);
-  });
-  useMotionValueEvent(green, "change", (v) => {
-    ref.current?.style.setProperty("--green-a", v);
-  });
-
-  return (
-    <div
-      ref={ref}
-      aria-hidden="true"
-      className={`pointer-events-none fixed inset-0 z-0 graph-ambient${reduceMotion ? " graph-ambient-static" : ""}`}
-      style={{
-        ["--purple-a" as string]: "rgba(167,139,250,0.02)",
-        ["--amber-a" as string]: "rgba(245,158,11,0.02)",
-        ["--cyan-a" as string]: "rgba(56,189,248,0.02)",
-        ["--green-a" as string]: "rgba(52,211,153,0.02)",
-        willChange: "background-position",
-      }}
-    />
-  );
-}
-
-function Legend() {
-  return (
-    <div
-      className="relative z-10 mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1.5 sm:px-4 font-mono text-[10px] sm:text-[11px] text-gray-500"
-      role="note"
-      aria-label="Legend: a circle marks a regular commit, a diamond marks a bugfix commit, a glowing circle marks HEAD"
-    >
-      <span className="flex items-center gap-1.5" aria-hidden="true">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        </svg>
-        commit
-      </span>
-      <span className="flex items-center gap-1.5" aria-hidden="true">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <rect
-            x="1.5"
-            y="1.5"
-            width="7"
-            height="7"
-            rx="1"
-            fill="none"
-            stroke={BUGFIX_COLOR}
-            strokeWidth="1.5"
-            transform="rotate(45 5 5)"
-          />
-        </svg>
-        <span style={{ color: BUGFIX_COLOR }}>fix</span>
-      </span>
-      <span className="flex items-center gap-1.5" aria-hidden="true">
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <circle cx="5" cy="5" r="4" fill="#34d399" opacity={0.9} />
-        </svg>
-        <span style={{ color: "#34d399" }}>HEAD</span>
-      </span>
-    </div>
-  );
-}
-
-function CommitIcon({ message, color }: { message: string; color: string }) {
-  const lowerMsg = message.toLowerCase();
-
-  if (lowerMsg.includes("scaffold")) {
-    return (
-      <svg
-        className="shrink-0 w-3.5 h-3.5 self-center"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke={color}
-        strokeWidth="2.5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M12 19v-7m0 0c0-2.5-2-4.5-4.5-4.5S3 9.5 3 12h9zm0 0c0-2.5 2-4.5 4.5-4.5S21 9.5 21 12h-9z"
-        />
-      </svg>
-    );
-  }
-
-  if (lowerMsg.includes("implement") || lowerMsg.includes("integrate")) {
-    return (
-      <svg
-        className="shrink-0 w-3.5 h-3.5 self-center"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke={color}
-        strokeWidth="2.5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"
-        />
-      </svg>
-    );
-  }
-
-  if (lowerMsg.startsWith("fix(") || lowerMsg.includes("resolve")) {
-    return (
-      <svg
-        className="shrink-0 w-3.5 h-3.5 self-center"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke={color}
-        strokeWidth="2.5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.83-5.83m-3.75 3.75a3.75 3.75 0 11-5.304-5.304 3.75 3.75 0 015.304 5.304zm0 0l4.22-4.22m-4.22 4.22l-1.9-1.9"
-        />
-      </svg>
-    );
-  }
-
-  if (lowerMsg.includes("milestone")) {
-    return (
-      <svg
-        className="shrink-0 w-3.5 h-3.5 self-center"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke={color}
-        strokeWidth="2.5"
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d="M3 21V3m0 2.25h16.5l-2.25 4.5 2.25 4.5H3"
-        />
-      </svg>
-    );
-  }
-
-  return null;
-}
+  BRANCH_DEFS,
+  BUGFIX_COLOR,
+  BUGFIX_DEFS,
+  LAYOUTS,
+  PALETTE,
+  TOTAL_ROWS,
+  branchByProject,
+} from "@/lib/portfolio/gitGraphData";
+import { buildGeometry, branchGlowWindow, drawRange, glowStops } from "@/lib/portfolio/gitGraphGeometry";
+import { useLayoutTier, usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
+import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 
 export function GitGraph() {
   const [hovered, setHovered] = useState<string | null>(null);
   const [selection, setSelection] = useState<CommitSelection | null>(null);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Tracked separately from `hovered` (which is the exact commit, used for
+  // that commit's own scale/glow/background feedback). This is "which
+  // branch is currently focused for dimming purposes" — moving the cursor
+  // between two commits *of the same branch* should never register as
+  // leaving it, even for the brief real gap between one row's mouseleave
+  // and the next row's mouseenter. unfocusBranch() delays the clear by a
+  // grace period and cancels it if focusBranch() fires again first, so
+  // that gap never gets committed to state and never triggers the (250ms,
+  // animated) dim/undim transition. Without this, every hop between
+  // adjacent commits of the same branch flashed the whole graph undimmed
+  // for a frame.
+  const [hoveredBranchGroup, setHoveredBranchGroup] = useState<string | null>(null);
+  const branchHoverTimeout = useRef<number | undefined>(undefined);
+
+  const focusBranch = (group: string) => {
+    window.clearTimeout(branchHoverTimeout.current);
+    setHoveredBranchGroup(group);
+  };
+  const unfocusBranch = (group: string) => {
+    window.clearTimeout(branchHoverTimeout.current);
+    branchHoverTimeout.current = window.setTimeout(() => {
+      setHoveredBranchGroup((g) => (g === group ? null : g));
+    }, 150);
+  };
+
+  useEffect(() => () => window.clearTimeout(branchHoverTimeout.current), []);
 
   const tier = useLayoutTier();
   const isCoarsePointer = usePointerCoarse();
@@ -655,22 +80,64 @@ export function GitGraph() {
   const spineProgress = useTransform(scrollYProgress, [0, 1], [0, 1]);
   const spineY2 = useTransform(spineProgress, [0, 1], [yOf(0), yOf(TOTAL_ROWS - 1)]);
 
-  const smoothProgress = useSpring(
-    spineProgress,
-    isCoarsePointer
-      ? { stiffness: 140, damping: 24, mass: 0.35 } // snappier — touch scroll has its own OS momentum already
-      : { stiffness: 90, damping: 26, mass: 0.5 },
-  );
+  const scrollSpringConfig = isCoarsePointer
+    ? { stiffness: 140, damping: 24, mass: 0.35 } // snappier — touch scroll has its own OS momentum already
+    : { stiffness: 90, damping: 26, mass: 0.5 };
+
+  const smoothProgress = useSpring(spineProgress, scrollSpringConfig);
+
+  // A SEPARATE scroll measurement, specifically for "which row is at the
+  // vertical center of the viewport right now" (used for auto-focus below).
+  // This can't reuse `spineProgress` above — that one is calibrated with
+  // offset ["start center", "end end"] because it's driving the spine-draw
+  // animation, where progress=1 should mean "scrolled to the very bottom
+  // of the container." That's a different reference point than "container
+  // bottom has reached viewport center," so reusing it here under-counts
+  // how far through the graph the centered row actually is, and the
+  // auto-focus branch lags behind what's visually centered on screen —
+  // e.g. AuctaSync would still read as "focused" while AsyncLangAI's
+  // commits are what's actually centered in view.
+  //
+  // With offset ["start center", "end center"], the viewport-height term
+  // cancels out algebraically (both reference points relate to the same
+  // "center" point), so progress * height is exactly the pixel distance
+  // from the container's top to whatever's centered in the viewport —
+  // independent of how tall the viewport itself is.
+  const { scrollYProgress: centerYProgress } = useScroll({
+    target: containerRef,
+    offset: ["start center", "end center"],
+  });
+  const smoothCenterProgress = useSpring(centerYProgress, scrollSpringConfig);
+
+  // Which feature branch the user is currently scrolled past, for
+  // auto-focus dimming. Uses a half-open row interval [sourceRow, mergeRow)
+  // — branches in this graph are contiguous on the trunk (e.g. AuctaSync's
+  // mergeRow is AsyncLangAI's sourceRow), so an inclusive-both-ends check
+  // would match two branches at once right at the handoff row. And this
+  // only calls setState when the active branch actually changes (tracked
+  // via a ref) rather than on every scroll tick, for the same reason
+  // ScrollProgress's counter was moved off useState earlier.
+  const scrolledBranchRef = useRef<string | null>(null);
+  const [scrolledBranch, setScrolledBranch] = useState<string | null>(null);
+
+  useMotionValueEvent(smoothCenterProgress, "change", (v) => {
+    // Inverts yOf(row) = topPad + row * rowH to solve for the row whose
+    // pixel position is at (v * height) from the container top.
+    const currentRow = (v * height - layout.topPad) / layout.rowH;
+    const active = BRANCH_DEFS.find((b) => currentRow >= b.sourceRow && currentRow < b.mergeRow);
+    const name = active?.name ?? null;
+    if (scrolledBranchRef.current !== name) {
+      scrolledBranchRef.current = name;
+      setScrolledBranch(name);
+    }
+  });
 
   // Each glow window is derived directly from that project's branch
   // sourceRow/mergeRow (see BRANCH_DEFS) — there's nothing to keep in sync
   // by hand anymore, and every feature branch automatically gets a glow.
   const purpleGlow = useTransform(
     smoothProgress,
-    branchGlowWindow(
-      branchByProject("assetverse").sourceRow,
-      branchByProject("assetverse").mergeRow,
-    ),
+    branchGlowWindow(branchByProject("assetverse").sourceRow, branchByProject("assetverse").mergeRow),
     glowStops(PALETTE.projects.assetverse.accent),
   );
 
@@ -682,19 +149,13 @@ export function GitGraph() {
 
   const cyanGlow = useTransform(
     smoothProgress,
-    branchGlowWindow(
-      branchByProject("asynclangai").sourceRow,
-      branchByProject("asynclangai").mergeRow,
-    ),
+    branchGlowWindow(branchByProject("asynclangai").sourceRow, branchByProject("asynclangai").mergeRow),
     glowStops(PALETTE.projects.asynclangai.accent),
   );
 
   const greenGlow = useTransform(
     smoothProgress,
-    branchGlowWindow(
-      branchByProject("careerpilot").sourceRow,
-      branchByProject("careerpilot").mergeRow,
-    ),
+    branchGlowWindow(branchByProject("careerpilot").sourceRow, branchByProject("careerpilot").mergeRow),
     glowStops(PALETTE.projects.careerpilot.accent),
   );
 
@@ -809,33 +270,25 @@ export function GitGraph() {
     }
   };
 
-  // Entrance transitions collapse to a near-instant fade for
-  // prefers-reduced-motion, matching the pattern used elsewhere in the app
-  // (see lib/portfolio/motion.ts) instead of springing/drawing in.
-  const nodeIdleTransition = (delay: number) =>
-    reduceMotion ? { duration: 0.01 } : { duration: 0.35, ease: "easeOut" as const, delay };
-  const nodeActiveTransition = reduceMotion
-    ? { duration: 0.01 }
-    : { type: "spring" as const, stiffness: 300, damping: 20 };
-  const dimTransition = reduceMotion
-    ? { duration: 0.01 }
-    : { duration: 0.25, ease: "easeOut" as const };
+  const dimTransition = reduceMotion ? { duration: 0.01 } : { duration: 0.25, ease: "easeOut" as const };
 
   // Hovering (or keyboard-focusing) any commit dims every branch except the
   // one it belongs to (main always stays visible, since it's the trunk
   // everything reads against) — a lightweight "depth of field" focus effect
   // done with opacity rather than backdrop-filter, since blurring thin SVG
-  // strokes just looks muddy rather than giving real depth.
-  const hoveredNode = hovered ? allNodes.find((n) => n.hash === hovered) : undefined;
-  const focusedBranch = hoveredNode?.branchGroup;
+  // strokes just looks muddy rather than giving real depth. An explicit
+  // hover always wins over the automatic scroll-focus above, so a person
+  // who's deliberately inspecting one branch never gets overridden by
+  // scroll position.
+  const focusedBranch = hoveredBranchGroup ?? scrolledBranch ?? undefined;
   const isDimmed = (group: string) =>
     Boolean(focusedBranch) && group !== "main" && group !== focusedBranch;
 
   return (
     <>
-      <ScrollProgress progress={spineProgress} />
+      <GitGraphScrollProgress progress={spineProgress} />
 
-      <AmbientGlow
+      <GitGraphAmbientGlow
         purple={purpleGlow}
         amber={amberGlow}
         cyan={cyanGlow}
@@ -843,10 +296,10 @@ export function GitGraph() {
         reduceMotion={reduceMotion}
       />
 
-      <Legend />
+      <GitGraphLegend />
 
-      {/* Fully fluid width now — no forced horizontal scroll. The graph and
-          its text column both shrink together via the tier-based layout, so
+      {/* Fully fluid width — no forced horizontal scroll. The graph and its
+          text column both shrink together via the tier-based layout, so
           this fits from small phones up through desktop without clipping. */}
       <div
         ref={containerRef}
@@ -878,7 +331,7 @@ export function GitGraph() {
             y1={yOf(0)}
             x2={layout.mainX}
             y2={spineY2}
-            stroke="#ffffff"
+            stroke={PALETTE.mainLine}
             strokeWidth={4}
             strokeLinecap="round"
           />
@@ -913,7 +366,7 @@ export function GitGraph() {
               strokeWidth={2}
               strokeLinecap="round"
               strokeDasharray="5 4"
-              animate={{ opacity: isDimmed(b.name) ? 0.12 : 0.85 }}
+              animate={{ opacity: isDimmed(b.branchGroup) ? 0.12 : 0.85 }}
               transition={dimTransition}
               style={{
                 pathLength: reduceMotion ? 1 : bugfixDrawByName[b.name],
@@ -923,247 +376,48 @@ export function GitGraph() {
           ))}
 
           {/* nodes */}
-          {allNodes.map((n) => {
-            const isHovered = hovered === n.hash;
-            const isHighlighted = highlighted === n.hash;
-            const dimmed = isDimmed(n.branchGroup);
-            const baseR = (n.isHead ? 7.5 : n.isMain ? 6.5 : n.isBugfix ? 4.5 : 5.5) * nodeScale;
-            return (
-              <motion.g
-                key={n.hash}
-                initial={{ opacity: 0, scale: 0.4 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true, amount: 0.6 }}
-                animate={{
-                  scale: isHovered || isHighlighted ? 1.25 : 1,
-                  opacity: dimmed ? 0.3 : 1,
-                }}
-                transition={{
-                  scale:
-                    isHovered || isHighlighted
-                      ? nodeActiveTransition
-                      : nodeIdleTransition(n.revealDelay),
-                  opacity: dimTransition,
-                }}
-                style={{ transformOrigin: `${n.x}px ${n.y}px`, willChange: "transform, opacity" }}
-              >
-                {n.isHead && (
-                  <motion.circle
-                    cx={n.x}
-                    cy={n.y}
-                    r={12.5 * nodeScale}
-                    fill={PALETTE.head}
-                    opacity={0.35}
-                    animate={
-                      reduceMotion
-                        ? { opacity: 0.3 }
-                        : {
-                            r: [12.5 * nodeScale, 20 * nodeScale, 12.5 * nodeScale],
-                            opacity: [0.45, 0.05, 0.45],
-                          }
-                    }
-                    transition={
-                      reduceMotion
-                        ? { duration: 0.01 }
-                        : { duration: 2, repeat: Infinity, ease: "easeInOut" }
-                    }
-                    style={{ willChange: "transform, opacity" }}
-                  />
-                )}
-                {isHighlighted && (
-                  <motion.circle
-                    cx={n.x}
-                    cy={n.y}
-                    r={baseR + 4}
-                    fill="none"
-                    stroke={n.color}
-                    strokeWidth={2}
-                    initial={{ r: baseR, opacity: 0.9 }}
-                    animate={{ r: baseR + 18, opacity: 0 }}
-                    transition={
-                      reduceMotion
-                        ? { duration: 0.2 }
-                        : { duration: 1.2, ease: "easeOut", repeat: 1 }
-                    }
-                    style={{
-                      filter: `drop-shadow(0 0 8px ${n.color})`,
-                      willChange: "transform, opacity",
-                    }}
-                  />
-                )}
-                {(isHovered || isHighlighted) && !n.isHead && (
-                  <circle
-                    cx={n.x}
-                    cy={n.y}
-                    r={baseR + 5}
-                    fill={n.color}
-                    opacity={isHighlighted ? 0.4 : 0.25}
-                    style={{ filter: `drop-shadow(0 0 6px ${n.color})` }}
-                  />
-                )}
-                {n.isBugfix ? (
-                  <rect
-                    x={n.x - baseR * 0.85}
-                    y={n.y - baseR * 0.85}
-                    width={baseR * 1.7}
-                    height={baseR * 1.7}
-                    rx={1.5}
-                    transform={`rotate(45 ${n.x} ${n.y})`}
-                    fill="#0e0f13"
-                    stroke={n.color}
-                    strokeWidth={1.75}
-                    strokeDasharray="2 1.5"
-                  />
-                ) : (
-                  <circle
-                    cx={n.x}
-                    cy={n.y}
-                    r={baseR}
-                    fill="#0e0f13"
-                    stroke={n.isHead ? PALETTE.head : n.color}
-                    strokeWidth={n.isHead ? 2.5 : 2}
-                    filter={n.isHead ? "url(#head-glow)" : undefined}
-                  />
-                )}
-              </motion.g>
-            );
-          })}
+          {allNodes.map((n) => (
+            <GitGraphNode
+              key={n.hash}
+              n={n}
+              isHovered={hovered === n.hash}
+              isHighlighted={highlighted === n.hash}
+              dimmed={isDimmed(n.branchGroup)}
+              nodeScale={nodeScale}
+              reduceMotion={reduceMotion}
+            />
+          ))}
         </svg>
 
-        {/* Text column — its left offset tracks the (now-responsive) graph
+        {/* Text column — its left offset tracks the (responsive) graph
             width directly, so the two always line up at every tier. */}
         <ul
           className="absolute inset-y-0 right-1.5 sm:right-4 pointer-events-none list-none m-0 p-0"
           style={{ left: `calc(${graphW}px + 1.5rem)` }}
         >
-          {allNodes.map((n) => {
-            const isHovered = hovered === n.hash;
-            const isHighlighted = highlighted === n.hash;
-            const isMilestone = n.message.toLowerCase().includes("milestone");
-            const dimmed = isDimmed(n.branchGroup);
-            const commitAriaLabel =
-              n.branchGroup === "main"
-                ? `Commit selection: ${n.hash} ${n.message}`
-                : `Commit on ${n.branchGroup}${n.isBugfix ? ", bugfix" : ""}: ${n.hash} ${n.message}`;
-
-            return (
-              <li
-                key={n.hash}
-                className="absolute inset-x-0 flex flex-col pointer-events-auto"
-                style={{
-                  top: n.y,
-                  transform: "translateY(-50%)",
-                  opacity: dimmed ? 0.35 : 1,
-                  transition: reduceMotion ? undefined : "opacity 250ms ease-out",
-                }}
-              >
-                {/* branch context label */}
-                {n.branchName && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 4 }}
-                    whileInView={{ opacity: 0.45, y: 0 }}
-                    viewport={{ once: true, amount: 0.6 }}
-                    transition={nodeIdleTransition(n.revealDelay)}
-                    className="text-[10px] sm:text-[11px] font-mono tracking-tight text-gray-400 select-none pb-0.5 pointer-events-none flex items-center gap-1"
-                  >
-                    <span className="text-gray-600 font-bold font-sans">$</span>
-                    <span className="truncate">on {n.branchName}</span>
-                  </motion.div>
-                )}
-
-                <motion.button
-                  id={`commit-${n.hash}`}
-                  type="button"
-                  onClick={(e) => openCommit(n, e)}
-                  onMouseEnter={() => setHovered(n.hash)}
-                  onMouseLeave={() => setHovered((h) => (h === n.hash ? null : h))}
-                  onFocus={() => setHovered(n.hash)}
-                  onBlur={() => setHovered((h) => (h === n.hash ? null : h))}
-                  title={n.message}
-                  aria-label={commitAriaLabel}
-                  initial={{ opacity: 0, x: -6 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true, amount: 0.6 }}
-                  transition={nodeIdleTransition(n.revealDelay + 0.05)}
-                  className="flex items-start gap-2 sm:gap-3 rounded-md px-1.5 py-1 sm:py-0.5 text-left transition-all duration-200 w-full relative group min-w-0 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-                  style={{
-                    background: isHighlighted
-                      ? `${n.color}22`
-                      : isHovered
-                        ? "rgba(255,255,255,0.04)"
-                        : "transparent",
-                    boxShadow: isHighlighted ? `0 0 0 1px ${n.color}55` : "none",
-                  }}
-                >
-                  {/* milestone row emphasis */}
-                  {isMilestone && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      whileInView={{ opacity: 0.04 }}
-                      viewport={{ once: true, amount: 0.6 }}
-                      transition={
-                        reduceMotion
-                          ? { duration: 0.01 }
-                          : { duration: 0.5, ease: "easeOut", delay: n.revealDelay }
-                      }
-                      className="absolute inset-y-0 -left-3 right-0 rounded-l-md pointer-events-none -z-[5]"
-                      style={{ backgroundColor: n.color === "#ffffff" ? "#9ca3af" : n.color }}
-                    />
-                  )}
-
-                  <div className="flex items-center gap-1.5 shrink-0 tabular-nums pt-[2px]">
-                    <CommitIcon
-                      message={n.message}
-                      color={n.isHead ? PALETTE.head : n.isMain ? "#9ca3af" : n.textColor}
-                    />
-                    <span
-                      className="font-mono text-[11px] sm:text-[13px]"
-                      style={{ color: n.isHead ? PALETTE.head : "#6b7280" }}
-                    >
-                      {n.hash}
-                    </span>
-                  </div>
-                  <span
-                    className="leading-snug break-words text-[13px] sm:text-[14.5px] line-clamp-2 sm:line-clamp-none flex-1 min-w-0"
-                    style={{
-                      color: n.textColor,
-                      fontWeight: n.isMain || n.isHead || isMilestone ? 500 : 400,
-                      fontStyle: n.isBugfix ? "italic" : "normal",
-                      opacity: n.isHead ? 0.9 : n.isMain ? 0.9 : 0.85,
-                      textShadow: isHovered ? `0 0 12px ${n.color}66` : "none",
-                    }}
-                  >
-                    {n.message}
-                  </span>
-                </motion.button>
-              </li>
-            );
-          })}
+          {allNodes.map((n) => (
+            <GitGraphCommitRow
+              key={n.hash}
+              n={n}
+              isHovered={hovered === n.hash}
+              isHighlighted={highlighted === n.hash}
+              dimmed={isDimmed(n.branchGroup)}
+              reduceMotion={reduceMotion}
+              onOpen={openCommit}
+              onEnter={() => {
+                setHovered(n.hash);
+                focusBranch(n.branchGroup);
+              }}
+              onLeave={() => {
+                setHovered((h) => (h === n.hash ? null : h));
+                unfocusBranch(n.branchGroup);
+              }}
+            />
+          ))}
         </ul>
       </div>
 
       <CommitModal selection={selection} onClose={() => setSelection(null)} />
-
-      <style>{`
-        .graph-ambient {
-          background-image:
-            radial-gradient(circle at 15% 20%, var(--purple-a, rgba(167,139,250,0.02)) 0%, transparent 50%),
-            radial-gradient(circle at 85% 55%, var(--amber-a, rgba(245,158,11,0.02)) 0%, transparent 50%),
-            radial-gradient(circle at 70% 15%, var(--cyan-a, rgba(56,189,248,0.02)) 0%, transparent 50%),
-            radial-gradient(circle at 25% 85%, var(--green-a, rgba(52,211,153,0.02)) 0%, transparent 50%);
-          background-size: 160% 160%;
-          animation: graph-ambient-drift 24s ease-in-out infinite;
-          opacity: 0.85;
-        }
-        .graph-ambient-static {
-          animation: none;
-          background-position: 40% 30%;
-        }
-        @keyframes graph-ambient-drift {
-          0%, 100% { background-position: 0% 0%; }
-          50% { background-position: 100% 60%; }
-        }
-      `}</style>
     </>
   );
 }
