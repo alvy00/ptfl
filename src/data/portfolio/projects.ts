@@ -48,9 +48,9 @@ export const projects: Record<ProjectKey, Project> = {
   assetverse: {
     key: "assetverse",
     name: "AssetVerse — Asset Management System",
-    timeframe: { start: "2025-10-01", end: "2025-11-30", label: "Oct 2025 – Nov 2025" },
+    timeframe: { start: "2024-03-26", end: "2024-4-15", label: "Mar 2024 – April 2025" },
     description:
-      "Developed a full-stack organizational asset management platform that replaces scattered spreadsheets and manual tracking with a centralized, role-based system for asset allocation, lifecycle management, and team-wide visibility.",
+      "Developed a full-stack organizational asset management platform that replaces scattered spreadsheets and manual tracking with a centralized, role-based (RBAC) system for asset allocation, lifecycle management, and team-wide visibility.",
     features: [
       {
         title: "Employee-Wise Assignment & Tracking",

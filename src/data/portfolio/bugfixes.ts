@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 // TODO: PLACEHOLDER — replace with the real bug story before this site goes live.
 // A fabricated technical story is worse than no story if it doesn't hold up to a
 // follow-up question. Every field below (problem, triedFirst, rootCause, fix,

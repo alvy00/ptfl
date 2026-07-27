@@ -1,6 +1,12 @@
 /* eslint-disable prettier/prettier */
-import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useId } from "react";
+import {
+  AnimatePresence,
+  motion,
+  useDragControls,
+  useReducedMotion,
+  type PanInfo,
+} from "framer-motion";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
   commitDateFor,
   projects,
@@ -36,7 +42,189 @@ type Props = {
   onClose: () => void;
 };
 
+/* -----------------------------------------------------------------------
+ * Shared motion tokens — spring physics give every modal/popover a
+ * consistent, organic "voice" instead of a robotic fixed-duration ease.
+ * Mobile sheets carry slightly more damping (bigger, heavier surface);
+ * desktop popovers are snappier (small, low-inertia UI).
+ * ---------------------------------------------------------------------*/
+const modalSpring = { type: "spring", damping: 26, stiffness: 300 } as const;
+const mobileSheetSpring = { type: "spring", damping: 28, stiffness: 300 } as const;
+const popoverSpring = { type: "spring", damping: 22, stiffness: 340 } as const;
+const REDUCED_MOTION_TRANSITION = { duration: 0.15, ease: "linear" as const };
+
+/* -----------------------------------------------------------------------
+ * useMediaQuery — replaces the one-shot `window.innerWidth < 640` check.
+ * Reacts to resize/rotate and is SSR-safe (defaults to false on server,
+ * corrected on mount before paint via useLayoutEffect).
+ * ---------------------------------------------------------------------*/
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useLayoutEffect(() => {
+    const mql = window.matchMedia(query);
+    setMatches(mql.matches);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mql.addEventListener("change", handler);
+    return () => mql.removeEventListener("change", handler);
+  }, [query]);
+
+  return matches;
+}
+
+/* -----------------------------------------------------------------------
+ * useBodyScrollLock — prevents background scroll while any modal is open.
+ * Preserves scrollbar width so the page doesn't jump/shift.
+ * ---------------------------------------------------------------------*/
+function useBodyScrollLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    const { body } = document;
+    const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+
+    body.style.overflow = "hidden";
+    if (scrollBarWidth > 0) body.style.paddingRight = `${scrollBarWidth}px`;
+
+    return () => {
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
+  }, [active]);
+}
+
+/* -----------------------------------------------------------------------
+ * useFocusTrap — locks Tab/Shift+Tab cycling inside the container while
+ * mounted, focuses the first focusable element on open, and restores
+ * focus to whatever triggered the modal when it closes.
+ * ---------------------------------------------------------------------*/
+function useFocusTrap<T extends HTMLElement>(active: boolean) {
+  const containerRef = useRef<T | null>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+
+  const getFocusable = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return [];
+    return Array.from(
+      el.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), textarea, input, select, [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((n) => n.offsetParent !== null);
+  }, []);
+
+  useEffect(() => {
+    if (!active) return;
+    previouslyFocused.current = document.activeElement as HTMLElement | null;
+
+    const raf = requestAnimationFrame(() => {
+      const focusable = getFocusable();
+      (focusable[0] ?? containerRef.current)?.focus();
+    });
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "Tab") return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      cancelAnimationFrame(raf);
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused.current?.focus?.();
+    };
+  }, [active, getFocusable]);
+
+  return containerRef;
+}
+
+/* -----------------------------------------------------------------------
+ * useModalMotion — single source of truth for how a full-screen modal
+ * (FeatureModal / BugfixModal) enters, exits, and responds to touch.
+ *
+ * - Mobile: anchored bottom sheet (slides up from y:100%), draggable
+ *   via a dedicated handle so it never fights the body's own scroll.
+ * - Desktop: centered scale/fade, no drag.
+ * - Respects prefers-reduced-motion: drops to a plain opacity fade and
+ *   disables drag entirely, regardless of viewport.
+ * ---------------------------------------------------------------------*/
+function useModalMotion(onClose: () => void) {
+  const isMobile = useMediaQuery("(max-width: 639px)");
+  const reducedMotion = useReducedMotion();
+  const dragControls = useDragControls();
+  const dragEnabled = isMobile && !reducedMotion;
+
+  const variants = reducedMotion
+    ? {
+        initial: { opacity: 0 },
+        animate: { opacity: 1 },
+        exit: { opacity: 0 },
+      }
+    : isMobile
+      ? {
+          initial: { opacity: 0, y: "100%" },
+          animate: { opacity: 1, y: 0 },
+          exit: { opacity: 0, y: "100%" },
+        }
+      : {
+          initial: { opacity: 0, scale: 0.92, y: 12 },
+          animate: { opacity: 1, scale: 1, y: 0 },
+          exit: { opacity: 0, scale: 0.95, y: 8 },
+        };
+
+  const transition = reducedMotion
+    ? REDUCED_MOTION_TRANSITION
+    : isMobile
+      ? mobileSheetSpring
+      : modalSpring;
+
+  const dragProps = dragEnabled
+    ? {
+        drag: "y" as const,
+        dragControls,
+        dragListener: false, // only the handle starts a drag — never the scrollable body
+        dragConstraints: { top: 0, bottom: 0 },
+        dragElastic: { top: 0, bottom: 0.5 },
+        dragMomentum: false,
+        onDragEnd: (_: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
+          if (info.offset.y > 100 || info.velocity.y > 400) onClose();
+        },
+      }
+    : {};
+
+  return { isMobile, reducedMotion, dragControls, dragEnabled, variants, transition, dragProps };
+}
+
+/* -----------------------------------------------------------------------
+ * DragHandle — the small grabber bar mobile sheets use to opt in to a
+ * drag gesture without hijacking touches meant for scrolling content.
+ * ---------------------------------------------------------------------*/
+function DragHandle({ dragControls }: { dragControls: ReturnType<typeof useDragControls> }) {
+  return (
+    <div
+      className="flex shrink-0 touch-none cursor-grab justify-center pt-2.5 pb-1 active:cursor-grabbing sm:hidden"
+      onPointerDown={(e) => dragControls.start(e)}
+      aria-hidden="true"
+    >
+      <div className="h-1 w-10 rounded-full bg-white/20" />
+    </div>
+  );
+}
+
 export function CommitModal({ selection, onClose }: Props) {
+  useBodyScrollLock(Boolean(selection));
+
   useEffect(() => {
     if (!selection) return;
     const onKey = (e: KeyboardEvent) => {
@@ -66,6 +254,39 @@ export function CommitModal({ selection, onClose }: Props) {
   );
 }
 
+/* -----------------------------------------------------------------------
+ * Reusable close button — consistent active/focus states everywhere.
+ * ---------------------------------------------------------------------*/
+function CloseButton({ onClose }: { onClose: () => void }) {
+  return (
+    <button
+      onClick={onClose}
+      aria-label="Close dialog"
+      className="absolute cursor-pointer right-3 top-3.5 sm:right-4 sm:top-4 rounded-md px-2 py-1 text-xs sm:text-sm text-gray-400 transition-all hover:bg-white/5 hover:text-white active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 z-20 backdrop-blur-sm sm:backdrop-blur-none"
+      style={{ background: "rgba(20,22,30,0.6)" }}
+    >
+      ✕
+    </button>
+  );
+}
+
+/* -----------------------------------------------------------------------
+ * Shared surface style — solid fallback color under the blur (avoids
+ * GPU thrashing / illegibility on weak devices or busy backgrounds),
+ * plus a top inner highlight for a touch of skeuomorphic depth.
+ * ---------------------------------------------------------------------*/
+function surfaceStyle(accent: string) {
+  return {
+    background:
+      "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)) , rgba(17, 19, 26, 0.92)",
+    backdropFilter: "blur(20px) saturate(150%)",
+    WebkitBackdropFilter: "blur(20px) saturate(150%)",
+    border: `1px solid ${accent}33`,
+    borderTop: "1px solid rgba(255,255,255,0.10)",
+    boxShadow: `0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px ${accent}22`,
+  } as const;
+}
+
 function BugfixModal({
   selection,
   onClose,
@@ -76,6 +297,9 @@ function BugfixModal({
   const bug = bugfixes[selection.bugfixKey];
   const accent = bug.accent;
   const titleId = useId();
+  const containerRef = useFocusTrap<HTMLDivElement>(true);
+  const { reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
+    useModalMotion(onClose);
 
   return (
     <motion.div
@@ -83,7 +307,7 @@ function BugfixModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: reducedMotion ? 0.1 : 0.2 }}
     >
       <button
         aria-label="Close modal overlay"
@@ -95,22 +319,21 @@ function BugfixModal({
         }}
       />
       <motion.div
+        ref={containerRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col"
-        initial={{ opacity: 0, y: 30, scale: 0.99 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 20, scale: 0.99 }}
-        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        style={{
-          background: "rgba(20, 22, 30, 0.76)",
-          backdropFilter: "blur(24px) saturate(160%)",
-          border: `1px solid ${accent}33`,
-          boxShadow: `0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px ${accent}22`,
-        }}
+        className="relative w-full max-w-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col outline-none"
+        initial={variants.initial}
+        animate={variants.animate}
+        exit={variants.exit}
+        transition={transition}
+        style={surfaceStyle(accent)}
+        {...dragProps}
       >
-        <div className="overflow-y-auto flex-1 custom-scrollbar">
+        {dragEnabled && <DragHandle dragControls={dragControls} />}
+        <div className="overflow-y-auto flex-1 custom-scrollbar overscroll-contain">
           <div
             className="sticky top-0 z-10 flex items-center gap-2 sm:gap-3 border-b px-5 py-3.5 sm:px-8 sm:py-4 text-[11px] sm:text-[13px] uppercase tracking-widest backdrop-blur-md"
             style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(20, 22, 30, 0.4)" }}
@@ -135,7 +358,7 @@ function BugfixModal({
             </span>
           </div>
 
-          <div className="p-5 sm:p-8 md:p-9.5">
+          <div className="p-5 sm:p-8 md:p-9.5 max-w-[62ch] mx-auto">
             <div className="mb-1.5 flex flex-wrap items-center gap-1.5 sm:gap-2.5 text-[11px] sm:text-[13px] text-gray-500">
               <span style={{ color: accent }} className="break-all">
                 {bug.branch}
@@ -160,13 +383,7 @@ function BugfixModal({
           </div>
         </div>
 
-        <button
-          onClick={onClose}
-          aria-label="Close dialog"
-          className="absolute right-3 top-3.5 sm:right-4 sm:top-4 rounded-md px-2 py-1 text-xs sm:text-sm text-gray-400 hover:bg-white/5 hover:text-white z-20 bg-rgba(20,22,30,0.6) backdrop-blur-sm sm:backdrop-blur-none"
-        >
-          ✕ <span className="hidden sm:inline">esc</span>
-        </button>
+        <CloseButton onClose={onClose} />
       </motion.div>
     </motion.div>
   );
@@ -236,6 +453,9 @@ function FeatureModal({
   });
   const accent = project.accent;
   const titleId = useId();
+  const containerRef = useFocusTrap<HTMLDivElement>(true);
+  const { reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
+    useModalMotion(onClose);
 
   return (
     <motion.div
@@ -243,7 +463,7 @@ function FeatureModal({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.2 }}
+      transition={{ duration: reducedMotion ? 0.1 : 0.2 }}
     >
       <button
         aria-label="Close modal overlay"
@@ -255,152 +475,146 @@ function FeatureModal({
         }}
       />
       <motion.div
+        ref={containerRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative w-full max-w-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col"
-        initial={{ opacity: 0, y: 30, scale: 0.99 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={{ opacity: 0, y: 20, scale: 0.99 }}
-        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-        style={{
-          background: "rgba(20, 22, 30, 0.76)",
-          backdropFilter: "blur(24px) saturate(160%)",
-          border: `1px solid ${accent}33`,
-          boxShadow: `0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px ${accent}22`,
-        }}
+        className="relative w-full max-w-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col outline-none"
+        initial={variants.initial}
+        animate={variants.animate}
+        exit={variants.exit}
+        transition={transition}
+        style={surfaceStyle(accent)}
+        {...dragProps}
       >
-        <div className="overflow-y-auto flex-1 p-5 sm:p-8 md:p-9.5 custom-scrollbar">
-          <div
-            className="mb-5 rounded-lg border p-4 sm:p-5"
-            style={{
-              borderColor: `${accent}22`,
-              background: `linear-gradient(180deg, ${accent}08, transparent)`,
-            }}
-          >
-            <div className="flex items-center gap-2.5 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-400">
-              <span
-                className="inline-block h-2 w-2 rounded-full shrink-0"
-                style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
-              />
-              commit
-              <span className="text-gray-600">·</span>
-              <span className="tabular-nums text-gray-400 text-[11px] sm:text-[13px]">
-                {selection.hash}
-              </span>
-            </div>
-            <p className="mt-2 text-sm sm:text-base leading-snug text-white break-words">
-              {selection.message}
-            </p>
-            <p className="mt-2 text-[11px] sm:text-[13px] text-gray-500">
-              <span>{dateLabel}</span>
-              <span className="mx-1.5 text-gray-700">·</span>
-              <span>{rel}</span>
-            </p>
-          </div>
-
-          <div className="mb-1 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
-            project
-          </div>
-          <h3 id={titleId} className="text-lg sm:text-xl font-semibold text-white leading-tight">
-            {project.name}
-          </h3>
-          {selection.projectKey !== "assetverse" && (
-            <p className="mt-1 text-[11px] sm:text-[13px] text-gray-400">
-              {project.timeframe.label}
-            </p>
-          )}
-          <p className="mt-3 text-[14px] sm:text-[15.5px] leading-relaxed text-gray-300 font-sans break-words">
-            {project.description}
-          </p>
-
-          <div className="mt-5">
-            <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
-              key features
-            </div>
-            <ul className="space-y-2">
-              {project.features.map((f) => (
-                <li
-                  key={f.title}
-                  className="flex gap-2.5 text-[14.5px] sm:text-[15.5px] font-sans align-top"
-                >
-                  <span
-                    className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
-                    style={{ background: accent }}
-                  />
-                  <span className="text-gray-200 break-words">
-                    <span className="font-medium text-white">{f.title}</span>
-                    <span className="text-gray-400"> — {f.detail}</span>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <div className="mt-5">
-            <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
-              stack
-            </div>
-            <div className="flex flex-wrap gap-1.5 sm:gap-2.5">
-              {project.stack.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-full border px-2.5 py-0.5 text-[11px] sm:text-[13px]"
-                  style={{
-                    borderColor: `${accent}44`,
-                    color: accent,
-                    background: `${accent}08`,
-                  }}
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            <a
-              href={project.demoUrl}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="rounded-md px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-transform hover:-translate-y-0.5 select-none"
+        {dragEnabled && <DragHandle dragControls={dragControls} />}
+        <div className="overflow-y-auto flex-1 p-5 sm:p-8 md:p-9.5 custom-scrollbar overscroll-contain">
+          <div className="max-w-[62ch] mx-auto">
+            <div
+              className="mb-5 rounded-lg border p-4 sm:p-5"
               style={{
-                background: accent,
-                color: "#0b0c10",
-                boxShadow: `0 6px 20px ${accent}44`,
+                borderColor: `${accent}22`,
+                background: `linear-gradient(180deg, ${accent}08, transparent)`,
               }}
             >
-              Live Demo ↗
-            </a>
-            {project.codeLinks.map((link) => (
+              <div className="flex items-center gap-2.5 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-400">
+                <span
+                  className="inline-block h-2 w-2 rounded-full shrink-0"
+                  style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
+                />
+                commit
+                <span className="text-gray-600">·</span>
+                <span className="tabular-nums text-gray-400 text-[11px] sm:text-[13px]">
+                  {selection.hash}
+                </span>
+              </div>
+              <p className="mt-2 text-sm sm:text-base leading-snug text-white break-words">
+                {selection.message}
+              </p>
+              <p className="mt-2 text-[11px] sm:text-[13px] text-gray-500">
+                <span>{dateLabel}</span>
+                <span className="mx-1.5 text-gray-700">·</span>
+                <span>{rel}</span>
+              </p>
+            </div>
+
+            <div className="mb-1 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
+              project
+            </div>
+            <h3 id={titleId} className="text-lg sm:text-xl font-semibold text-white leading-tight">
+              {project.name}
+            </h3>
+            {selection.projectKey !== "assetverse" && (
+              <p className="mt-1 text-[11px] sm:text-[13px] text-gray-400">
+                {project.timeframe.label}
+              </p>
+            )}
+            <p className="mt-3 text-[14px] sm:text-[15.5px] leading-relaxed text-gray-300 font-sans break-words">
+              {project.description}
+            </p>
+
+            <div className="mt-5">
+              <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
+                key features
+              </div>
+              <ul className="space-y-2">
+                {project.features.map((f) => (
+                  <li
+                    key={f.title}
+                    className="flex gap-2.5 text-[14.5px] sm:text-[15.5px] font-sans align-top"
+                  >
+                    <span
+                      className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
+                      style={{ background: accent }}
+                    />
+                    <span className="text-gray-200 break-words">
+                      <span className="font-medium text-white">{f.title}</span>
+                      <span className="text-gray-400"> — {f.detail}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mt-5">
+              <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
+                stack
+              </div>
+              <div className="flex flex-wrap gap-1.5 sm:gap-2.5">
+                {project.stack.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border px-2.5 py-0.5 text-[11px] sm:text-[13px]"
+                    style={{
+                      borderColor: `${accent}44`,
+                      color: accent,
+                      background: `${accent}08`,
+                    }}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-wrap items-center gap-2">
               <a
-                key={link.url}
-                href={link.url}
+                href={project.demoUrl}
                 target="_blank"
                 rel="noreferrer noopener"
-                className="rounded-md border px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-gray-200 transition-colors hover:text-white select-none"
+                className="rounded-md px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-transform hover:-translate-y-0.5 active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
                 style={{
-                  borderColor: `${accent}44`,
-                  background: "rgba(255,255,255,0.01)",
+                  background: accent,
+                  color: "#0b0c10",
+                  boxShadow: `0 6px 20px ${accent}44`,
                 }}
               >
-                {project.codeLinks.length > 1 ? link.label : "View Code"} ↗
+                Live Demo ↗
               </a>
-            ))}
-          </div>
+              {project.codeLinks.map((link) => (
+                <a
+                  key={link.url}
+                  href={link.url}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="rounded-md border px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-gray-200 transition-colors hover:text-white active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                  style={{
+                    borderColor: `${accent}44`,
+                    background: "rgba(255,255,255,0.01)",
+                  }}
+                >
+                  {project.codeLinks.length > 1 ? link.label : "View Code"} ↗
+                </a>
+              ))}
+            </div>
 
-          <div className="mt-2 w-full border-t border-white/[0.04]" />
-          <AskProject projectKey={selection.projectKey} accent={accent} />
+            <div className="mt-2 w-full border-t border-white/[0.04]" />
+            <AskProject projectKey={selection.projectKey} accent={accent} />
+          </div>
         </div>
 
-        <button
-          onClick={onClose}
-          aria-label="Close dialog"
-          className="absolute right-3 top-3.5 sm:right-4 sm:top-4 rounded-md px-2 py-1 text-xs sm:text-sm text-gray-400 hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 z-20 backdrop-blur-sm sm:backdrop-blur-none"
-          style={{ background: "rgba(20,22,30,0.6)" }}
-        >
-          ✕ <span className="hidden sm:inline">esc</span>
-        </button>
+        <CloseButton onClose={onClose} />
       </motion.div>
     </motion.div>
   );
@@ -444,13 +658,55 @@ function SimplePopover({
   onClose: () => void;
 }) {
   const titleId = useId();
+  const isMobile = useMediaQuery("(max-width: 639px)");
+  const containerRef = useFocusTrap<HTMLDivElement>(true);
+  const reducedMotion = useReducedMotion();
+  const dragControls = useDragControls();
+  const dragEnabled = isMobile && !reducedMotion;
 
-  // Screen check handles responsive position swapping safely inside dynamic hook lifecycle blocks
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 640;
+  // Viewport-safe placement: clamps horizontally AND vertically, and flips
+  // to the opposite side of the anchor when the default side would clip
+  // off the right or bottom edge (e.g. commits near the far edge of the
+  // graph), instead of just sliding along the edge and covering the node.
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
-  // Desktop coordinate constraints
-  const computedLeft =
-    typeof window !== "undefined" ? Math.min(anchorX + 24, window.innerWidth - 350) : anchorX + 24;
+  useLayoutEffect(() => {
+    if (isMobile) {
+      setPos(null);
+      return;
+    }
+    const POPOVER_WIDTH = 370;
+    const POPOVER_HEIGHT_ESTIMATE = 140;
+    const margin = 16;
+
+    let left = anchorX + 24;
+    if (left + POPOVER_WIDTH > window.innerWidth - margin) {
+      left = anchorX - POPOVER_WIDTH - 24; // flip to the left of the anchor
+    }
+    left = Math.min(Math.max(margin, left), window.innerWidth - POPOVER_WIDTH - margin);
+
+    let top = anchorY - 24;
+    if (top + POPOVER_HEIGHT_ESTIMATE > window.innerHeight - margin) {
+      top = window.innerHeight - POPOVER_HEIGHT_ESTIMATE - margin; // push up off the bottom edge
+    }
+    top = Math.max(margin, top);
+
+    setPos({ left, top });
+  }, [anchorX, anchorY, isMobile]);
+
+  const dragProps = dragEnabled
+    ? {
+        drag: "y" as const,
+        dragControls,
+        dragListener: false,
+        dragConstraints: { top: 0, bottom: 0 },
+        dragElastic: { top: 0, bottom: 0.5 },
+        dragMomentum: false,
+        onDragEnd: (_: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
+          if (info.offset.y > 100 || info.velocity.y > 400) onClose();
+        },
+      }
+    : {};
 
   return (
     <>
@@ -461,35 +717,49 @@ function SimplePopover({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.15 }}
+        transition={{ duration: reducedMotion ? 0.08 : 0.15 }}
       />
       <motion.div
+        ref={containerRef}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="fixed z-50 font-mono left-4 right-4 bottom-4 sm:left-auto sm:right-auto sm:bottom-auto"
-        style={
-          isMobile
-            ? {}
-            : {
-                left: computedLeft,
-                top: anchorY - 24,
-              }
+        className="fixed z-50 font-mono left-4 right-4 bottom-4 sm:left-auto sm:right-auto sm:bottom-auto outline-none"
+        style={isMobile || !pos ? {} : { left: pos.left, top: pos.top }}
+        initial={
+          reducedMotion
+            ? { opacity: 0 }
+            : isMobile
+              ? { opacity: 0, y: 20, scale: 1 }
+              : { opacity: 0, y: 6, scale: 0.96 }
         }
-        initial={isMobile ? { opacity: 0, y: 20, scale: 1 } : { opacity: 0, y: 6, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        exit={isMobile ? { opacity: 0, y: 15, scale: 1 } : { opacity: 0, y: 4, scale: 0.96 }}
-        transition={{ duration: 0.18, ease: "easeOut" }}
+        exit={
+          reducedMotion
+            ? { opacity: 0 }
+            : isMobile
+              ? { opacity: 0, y: 15, scale: 1 }
+              : { opacity: 0, y: 4, scale: 0.96 }
+        }
+        transition={reducedMotion ? REDUCED_MOTION_TRANSITION : popoverSpring}
+        {...dragProps}
       >
         <div
-          className="w-full sm:max-w-sm rounded-xl sm:rounded-lg p-4 shadow-2xl"
+          className={`w-full sm:max-w-sm rounded-xl sm:rounded-lg p-4 shadow-2xl ${
+            dragEnabled ? "pt-1.5" : ""
+          }`}
           style={{
-            background: "rgba(20, 22, 30, 0.9)",
-            backdropFilter: "blur(20px) saturate(160%)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0)), rgba(18, 20, 27, 0.94)",
+            backdropFilter: "blur(18px) saturate(150%)",
+            WebkitBackdropFilter: "blur(18px) saturate(150%)",
             border: `1px solid ${color}25`,
+            borderTop: "1px solid rgba(255,255,255,0.08)",
             boxShadow: "0 25px 60px rgba(0,0,0,0.65), 0 0 30px rgba(0,0,0,0.2)",
           }}
         >
+          {dragEnabled && <DragHandle dragControls={dragControls} />}
           <div className="flex items-center gap-2.5 text-[11px] uppercase tracking-widest text-gray-400">
             <span
               className="inline-block h-1.5 w-1.5 rounded-full shrink-0"
