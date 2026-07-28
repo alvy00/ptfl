@@ -47,37 +47,37 @@ export function GitGraphCommitRow({
   const viewportTrigger = { once: true, amount: 0.15 } as const;
 
   // --- terminal-stream decrypt reveal -------------------------------------
-  // Reuses the motion.button's own viewport trigger below (onViewportEnter)
-  // instead of a second IntersectionObserver — 26 rows x 2 text fields is
-  // enough instances that a redundant observer per field isn't free.
+  // Deliberately NOT applied to every row. At 26 rows, a mandatory
+  // 300-500ms scramble on every single commit stops reading as a spectacle
+  // by row 8 and starts being friction between the user and the content
+  // they're scrolling to read. Reserved for commits that are actually
+  // narratively significant: the HEAD marker, milestone commits, and the
+  // first ("scaffold") commit of each branch — the moment a project starts.
+  // Everything else keeps the plain fade/slide reveal below unchanged.
+  const isFirstOfBranch = n.commitIndex === 0;
+  const shouldDecrypt = n.isHead || isMilestone || isFirstOfBranch;
+
   const [inView, setInView] = useState(false);
   const pointerCoarse = usePointerCoarse();
-  // Touch scroll can enter a dozen rows in the same second; coarser,
-  // fewer-frame ticks keep that from turning into a busy animation loop
-  // mid-scroll. Desktop keeps the snappier default.
+  // Touch scroll can enter several rows in the same second; coarser,
+  // fewer-frame ticks keep that from adding busy work mid-scroll. Desktop
+  // keeps the snappier default.
   const frameMs = pointerCoarse ? 40 : 28;
 
-  // hash resolves first, message ~120ms behind — reads top-down like a log
-  // line finishing its hash before printing the message.
-  const hashDelayMs = (n.revealDelay + 0.2) * 1000;
-  const messageDelayMs = hashDelayMs + 280;
-
-  const hashText = useDecryptText(n.hash, {
-    active: inView,
+  const hashRef = useDecryptText<HTMLSpanElement>(n.hash, {
+    // Don't start decrypting while this row is dimmed (another branch is
+    // hovered/highlighted and this one is faded to the background) — the
+    // effect should read as "this is the branch you're looking at,"
+    // not fire indiscriminately on rows the user has visually deprioritized.
+    active: inView && shouldDecrypt && !dimmed,
     // "HEAD" isn't a hex hash — scrambling it through 0-9a-f only would
     // never touch the letters it actually needs, so it'd flicker digits
     // right up until the snap. Give it the mixed pool instead.
     charset: n.isHead ? "mixed" : "hex",
     frameMs,
-    delayMs: hashDelayMs,
+    delayMs: (n.revealDelay + 0.5) * 1000,
     reducedMotion: reduceMotion,
-  });
-  const messageText = useDecryptText(n.message, {
-    active: inView,
-    charset: "mixed",
-    frameMs,
-    delayMs: messageDelayMs,
-    reducedMotion: reduceMotion,
+    glowColor: n.color,
   });
   // -------------------------------------------------------------------------
 
@@ -151,11 +151,16 @@ export function GitGraphCommitRow({
             message={n.message}
             color={n.isHead ? PALETTE.head : n.isMain ? "#9ca3af" : n.textColor}
           />
+          {/* children are always the real hash — SSR-correct and hydration-
+              safe. The decrypt hook (when shouldDecrypt is true) mutates
+              this node's textContent directly on top of that, never
+              replaces it. */}
           <span
+            ref={shouldDecrypt ? hashRef : undefined}
             className="font-mono text-[11px] sm:text-[13px]"
             style={{ color: n.isHead ? PALETTE.head : "#6b7280" }}
           >
-            {hashText}
+            {n.hash}
           </span>
         </div>
         <span
@@ -168,7 +173,7 @@ export function GitGraphCommitRow({
             textShadow: isHovered ? `0 0 12px ${n.color}66` : "none",
           }}
         >
-          {messageText}
+          {n.message}
         </span>
       </motion.button>
     </li>
