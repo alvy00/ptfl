@@ -16,6 +16,7 @@ import { GitGraphLegend } from "./GitGraphLegend";
 import { GitGraphNode } from "./GitGraphNode";
 import { GitGraphCommitRow } from "./GitGraphCommitRow";
 import { GitGraphActiveBorder } from "./GitGraphActiveBorder";
+import { GitGraphParticleField } from "./GitGraphParticleField";
 
 import {
   BRANCH_DEFS,
@@ -337,6 +338,21 @@ export function GitGraph() {
         className="relative w-full max-w-full overflow-x-clip px-1.5 sm:px-4"
         style={{ height }}
       >
+        {/* Ambient particle field — first child so it's behind the SVG/
+            border/text layers by DOM order alone, no z-index needed. Reads
+            the same containerRef, branches, layout, and focusedBranch this
+            component already computes; doesn't introduce a second source
+            of truth for any of them. */}
+        <GitGraphParticleField
+          containerRef={containerRef}
+          branches={branches}
+          layout={layout}
+          graphW={graphW}
+          focusedBranch={focusedBranch}
+          reduceMotion={reduceMotion}
+          isCoarsePointer={isCoarsePointer}
+        />
+
         {/* SVG graph */}
         <svg
           className="pointer-events-none absolute inset-y-0 left-1.5 sm:left-4"
