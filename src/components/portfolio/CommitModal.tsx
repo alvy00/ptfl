@@ -16,6 +16,7 @@ import {
 } from "@/data/portfolio/projects";
 import { bugfixes, type BugfixKey } from "@/data/portfolio/bugfixes";
 import { AskProject } from "./AskProject";
+import { GlassSpecular, useGlassTilt } from "./useGlassTilt";
 
 export type CommitSelection =
   | {
@@ -298,8 +299,12 @@ function BugfixModal({
   const accent = bug.accent;
   const titleId = useId();
   const containerRef = useFocusTrap<HTMLDivElement>(true);
-  const { reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
+  const { isMobile, reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
     useModalMotion(onClose);
+  const { tiltStyle, handlers, markSettled, specXPct, specYPct, active } = useGlassTilt(
+    containerRef,
+    { disabled: isMobile || Boolean(reducedMotion) },
+  );
 
   return (
     <motion.div
@@ -329,7 +334,9 @@ function BugfixModal({
         animate={variants.animate}
         exit={variants.exit}
         transition={transition}
-        style={surfaceStyle(accent)}
+        style={{ ...surfaceStyle(accent), ...tiltStyle }}
+        onAnimationComplete={markSettled}
+        {...handlers}
         {...dragProps}
       >
         {dragEnabled && <DragHandle dragControls={dragControls} />}
@@ -384,6 +391,7 @@ function BugfixModal({
         </div>
 
         <CloseButton onClose={onClose} />
+        <GlassSpecular x={specXPct} y={specYPct} accent={accent} active={active} />
       </motion.div>
     </motion.div>
   );
@@ -454,8 +462,12 @@ function FeatureModal({
   const accent = project.accent;
   const titleId = useId();
   const containerRef = useFocusTrap<HTMLDivElement>(true);
-  const { reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
+  const { isMobile, reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
     useModalMotion(onClose);
+  const { tiltStyle, handlers, markSettled, specXPct, specYPct, active } = useGlassTilt(
+    containerRef,
+    { disabled: isMobile || Boolean(reducedMotion) },
+  );
 
   return (
     <motion.div
@@ -485,7 +497,9 @@ function FeatureModal({
         animate={variants.animate}
         exit={variants.exit}
         transition={transition}
-        style={surfaceStyle(accent)}
+        style={{ ...surfaceStyle(accent), ...tiltStyle }}
+        onAnimationComplete={markSettled}
+        {...handlers}
         {...dragProps}
       >
         {dragEnabled && <DragHandle dragControls={dragControls} />}
@@ -615,6 +629,7 @@ function FeatureModal({
         </div>
 
         <CloseButton onClose={onClose} />
+        <GlassSpecular x={specXPct} y={specYPct} accent={accent} active={active} />
       </motion.div>
     </motion.div>
   );
