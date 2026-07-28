@@ -29,10 +29,13 @@ type GeometryBranch = {
  *
  * Deliberately NOT a general-purpose "connect every branch" web: only the
  * currently-focused branch gets a line, matching the same
- * focused/dimmed language the rest of the graph already uses. Cursor
- * proximity only nudges particles/the line's curve within a limited
- * radius — never a global field shift — so this stays a quiet ambient
- * layer, not something competing for attention with the actual content.
+ * focused/dimmed language the rest of the graph already uses. The
+ * connector's curve is fixed (a static bow, no cursor reactivity) — it
+ * sits in the same screen region as the cursor while someone reads and
+ * clicks through commits, so making it chase the cursor there competed
+ * with that interaction rather than staying ambient. Only the background
+ * particles respond to cursor proximity, and only within a limited
+ * radius — never a global field shift.
  *
  * Does not mount its render loop at all — not even a static frame — when
  * reduceMotion or isCoarsePointer is true. No cursor to react to on touch,
@@ -78,9 +81,17 @@ export function GitGraphParticleField({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const CURSOR_RADIUS = 140; // px — only particles/curve points within this react to the cursor
+    const CURSOR_RADIUS = 140; // px — only particles within this react to the cursor
     const MAX_PULL = 18; // px — max displacement at the very center of the radius
-    const PARTICLE_COUNT = 24;
+    // Was 24 — dropped hard per review: this many faint dots reads as
+    // generic "AI landing page" ambient chrome, not something specific to
+    // a git graph, and it's the one part of this effect with no diegetic
+    // tie to the metaphor the rest of the component maintains (decrypt
+    // scramble, comet rays, terminal prompts — all git/terminal-flavored).
+    // Keeping a handful rather than cutting to zero: a few points of quiet
+    // life in the graph's own empty margins still does something; two
+    // dozen didn't do more of that thing, just more of it.
+    const PARTICLE_COUNT = 7;
 
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
     let width = 0;
@@ -101,8 +112,17 @@ export function GitGraphParticleField({
     let particles: Particle[] = [];
 
     const seedParticles = () => {
+      // Spawn region is deliberately capped to graphWRef.current, not the
+      // full container width — the container spans graph + text column
+      // together, and the previous version seeded across all of it,
+      // meaning particles could drift directly behind commit messages
+      // someone is actively reading. graphW is the graph's own SVG width;
+      // everything past it (+ the 1.5rem gap) is the text column and is
+      // now off-limits for spawn points. A small margin is kept off the
+      // graph's own right edge too, so nothing spawns hugging the seam.
+      const spawnW = Math.max(0, graphWRef.current - 12);
       particles = Array.from({ length: PARTICLE_COUNT }, () => ({
-        baseX: Math.random() * width,
+        baseX: Math.random() * spawnW,
         baseY: Math.random() * height,
         driftPhase: Math.random() * Math.PI * 2,
         driftSpeed: 0.15 + Math.random() * 0.2, // radians/sec-ish, scaled by dt below
@@ -185,8 +205,20 @@ export function GitGraphParticleField({
     };
 
     let raf = 0;
+    let running = false;
     let last = performance.now();
     let travelT = 0; // 0..1 progress of the traveling light along the connector curve
+
+    const stop = () => {
+      if (running) cancelAnimationFrame(raf);
+      running = false;
+    };
+    const start = () => {
+      if (running) return;
+      running = true;
+      last = performance.now();
+      raf = requestAnimationFrame(tick);
+    };
 
     const tick = (now: number) => {
       const dt = Math.min(0.05, (now - last) / 1000);
@@ -225,14 +257,20 @@ export function GitGraphParticleField({
         const anchor = { x: branchTrackX, y: (branch.sourceY + branch.mergeY) / 2 };
         const target = focusedBoxCenter(branch, ly, graphWRef.current);
 
-        // Control point at the curve's midpoint, nudged by cursor pull if
-        // the cursor happens to be near it — this is the "bends toward the
-        // cursor" behavior, scoped to just this one line.
+        // Control point at the curve's midpoint, with a fixed gentle bow —
+        // no cursor influence here anymore. This used to nudge toward the
+        // cursor within CURSOR_RADIUS, but that radius overlaps almost
+        // exactly with where someone's cursor naturally sits while reading
+        // down the commit list and hovering rows to click into them — so
+        // the connector was liable to be warping continuously under the
+        // cursor during the one interaction (reading + clicking) that
+        // matters most here. A static, predictable curve reads as "ambient
+        // decoration" the way it was meant to; a curve that flinches away
+        // from the reader's own cursor reads as competing with them.
         const midX = (anchor.x + target.x) / 2;
         const midY = (anchor.y + target.y) / 2;
-        const [pullX, pullY] = cursorPull(midX, midY);
-        const ctrlX = midX + pullX;
-        const ctrlY = midY + pullY - 10; // slight natural upward bow even with no cursor influence
+        const ctrlX = midX;
+        const ctrlY = midY - 10; // slight natural upward bow
 
         ctx.beginPath();
         ctx.moveTo(anchor.x, anchor.y);
@@ -264,22 +302,40 @@ export function GitGraphParticleField({
       raf = requestAnimationFrame(tick);
     };
 
-    raf = requestAnimationFrame(tick);
+    // Was an unconditional `raf = requestAnimationFrame(tick)` here — the
+    // loop ran the entire time this component was mounted, including while
+    // the graph was scrolled well out of view. IntersectionObserver below
+    // is what actually decides when to start; this effect just wires it
+    // up, it doesn't kick the loop off itself.
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !document.hidden) start();
+        else stop();
+      },
+      { threshold: 0 },
+    );
+    io.observe(container);
 
-    // Pause entirely when the tab isn't visible — no reason to keep ticking
-    // an ambient background effect nobody can see.
+    // Tab-visibility pause, layered on top of the viewport check above —
+    // either condition alone should be enough to stop the loop, and both
+    // need to hold for it to run.
     const onVisibility = () => {
       if (document.hidden) {
-        cancelAnimationFrame(raf);
+        stop();
       } else {
-        last = performance.now();
-        raf = requestAnimationFrame(tick);
+        // Re-check intersection rather than assuming "tab became visible"
+        // means "graph is on screen" — the user could've backgrounded the
+        // tab while scrolled somewhere else entirely on this page.
+        const rect = container.getBoundingClientRect();
+        const inViewport = rect.bottom > 0 && rect.top < window.innerHeight;
+        if (inViewport) start();
       }
     };
     document.addEventListener("visibilitychange", onVisibility);
 
     return () => {
-      cancelAnimationFrame(raf);
+      stop();
+      io.disconnect();
       ro.disconnect();
       container.removeEventListener("mousemove", onMouseMove);
       container.removeEventListener("mouseleave", onMouseLeave);
