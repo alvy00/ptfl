@@ -151,7 +151,7 @@ export const BRANCH_DEFS: BranchDef[] = [
     projectKey: "careerpilot",
     color: PALETTE.projects.careerpilot.accent,
     lane: 5,
-    sourceRow: 20,
+    sourceRow: 19,
     mergeRow: 26,
     delay: 2.0,
     commits: withRows(careerpilotCommitContent, CAREERPILOT_ROWS),

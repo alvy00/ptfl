@@ -22,6 +22,19 @@ export function buildGeometry(layout: Layout) {
   const featureOffset = rowH * FEATURE_OFFSET_RATIO;
   const bugfixOffset = rowH * BUGFIX_OFFSET_RATIO;
 
+  // Every feature branch sits at the SAME fixed distance from the main
+  // spine, and every bugfix branch sits at the same (larger) fixed
+  // distance — regardless of each branch's own `lane` number. `lane` was
+  // only ever a slot index (used for color/identity lookups like
+  // laneToBranchName and bugfixColorForParentLane below), but it was also
+  // being fed straight into laneX() as if it meant physical offset — so
+  // AssetVerse (lane 1) sat close to the spine while AuctaSync (lane 2)
+  // and CareerPilot (lane 5) sat progressively farther out. Decoupling
+  // "which lane" from "how far" fixes that: FEATURE_X/BUGFIX_X below are
+  // the only two rail distances that ever get drawn.
+  const FEATURE_X = laneX(2.25);
+  const BUGFIX_X = laneX(3.25);
+
   const branches = BRANCH_DEFS.map((b) => ({
     ...b,
     sourceY: yOf(b.sourceRow) + featureOffset,
@@ -43,43 +56,41 @@ export function buildGeometry(layout: Layout) {
     color: bugfixColorForParentLane(b.parentLane),
   }));
 
-  // Control points now lead horizontally out of the fork/merge point before
-  // curving vertically, instead of a pure-vertical tangent straight off
-  // mainX. HORIZONTAL_LEAD is how far (as a fraction of the lane distance)
-  // the first/last control point travels sideways while still at the
-  // source/merge row's own Y — that's what gives the curve a natural
-  // "branching outward" feel instead of a sharp vertical-then-diagonal
-  // kink right at the trunk.
-  const HORIZONTAL_LEAD = 0.4;
+  // Flat-rail geometry: entry/exit are short, FIXED-length curves (tied to
+  // rowH, not to where the branch's first/last commit happens to fall), and
+  // everything between them is a dead-straight vertical line at the lane's
+  // x. Previously the curve's reach was derived from `firstY`/`lastY` (the
+  // first/last commit rows), so a branch's own commit spacing decided how
+  // wide/lazy its fork-off arc looked — inconsistent across branches and,
+  // combined with the full lane-width horizontal sweep, read as a wide bow
+  // down the whole branch rather than a quick peel-off the trunk. Decoupling
+  // the curve length from commit content fixes both: every branch gets an
+  // identical, short hook, and the straight run (now the dominant visual)
+  // is a true flat column parallel to the main spine.
+  const ENTRY_LEN = rowH * 0.35;
 
   const branchPath = (b: (typeof branches)[number]): string => {
-    const bx = laneX(b.lane);
-    const dx = bx - mainX;
-    const firstY = yOf(b.commits[0].row);
-    const lastY = yOf(b.commits[b.commits.length - 1].row);
-    const c1 = (firstY - b.sourceY) / 2;
-    const c2 = (b.mergeY - lastY) / 2;
+    const bx = FEATURE_X;
+    const entryEndY = b.sourceY + ENTRY_LEN;
+    const exitStartY = b.mergeY - ENTRY_LEN;
     return [
       `M ${mainX} ${b.sourceY}`,
-      `C ${mainX + dx * HORIZONTAL_LEAD} ${b.sourceY}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
-      `L ${bx} ${lastY}`,
-      `C ${bx} ${b.mergeY - c2}, ${mainX + dx * HORIZONTAL_LEAD} ${b.mergeY}, ${mainX} ${b.mergeY}`,
+      `C ${mainX} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${entryEndY}`,
+      `L ${bx} ${exitStartY}`,
+      `C ${bx} ${b.mergeY - ENTRY_LEN * 0.5}, ${mainX} ${b.mergeY - ENTRY_LEN * 0.5}, ${mainX} ${b.mergeY}`,
     ].join(" ");
   };
 
   const bugfixPath = (b: (typeof bugfixBranches)[number]): string => {
-    const px = laneX(b.parentLane);
-    const bx = laneX(b.lane);
-    const dx = bx - px;
-    const firstY = yOf(b.commits[0].row);
-    const lastY = yOf(b.commits[b.commits.length - 1].row);
-    const c1 = (firstY - b.sourceY) / 2;
-    const c2 = (b.mergeY - lastY) / 2;
+    const px = FEATURE_X;
+    const bx = BUGFIX_X;
+    const entryEndY = b.sourceY + ENTRY_LEN;
+    const exitStartY = b.mergeY - ENTRY_LEN;
     return [
       `M ${px} ${b.sourceY}`,
-      `C ${px + dx * HORIZONTAL_LEAD} ${b.sourceY}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
-      `L ${bx} ${lastY}`,
-      `C ${bx} ${b.mergeY - c2}, ${px + dx * HORIZONTAL_LEAD} ${b.mergeY}, ${px} ${b.mergeY}`,
+      `C ${px} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${entryEndY}`,
+      `L ${bx} ${exitStartY}`,
+      `C ${bx} ${b.mergeY - ENTRY_LEN * 0.5}, ${px} ${b.mergeY - ENTRY_LEN * 0.5}, ${px} ${b.mergeY}`,
     ].join(" ");
   };
 
@@ -107,7 +118,7 @@ export function buildGeometry(layout: Layout) {
     })),
     ...branches.flatMap((b, bi) =>
       b.commits.map((c, i) => ({
-        x: laneX(b.lane),
+        x: FEATURE_X,
         y: yOf(c.row),
         hash: c.hash,
         message: c.message,
@@ -123,7 +134,7 @@ export function buildGeometry(layout: Layout) {
     ),
     ...bugfixBranches.flatMap((b, bi) =>
       b.commits.map((c, i) => ({
-        x: laneX(b.lane),
+        x: BUGFIX_X,
         y: yOf(c.row),
         hash: c.hash,
         message: c.message,

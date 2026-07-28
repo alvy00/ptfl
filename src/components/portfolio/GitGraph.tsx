@@ -469,8 +469,8 @@ export function GitGraph() {
             // line (label + padding needed more room than other branches
             // apparently needed) — bumped just for that branch rather than
             // globally, since the other branches were already fine.
-            const TOP_CLEARANCE = b.projectKey === "careerpilot" ? layout.rowH + 5 : 4;
-            const BOTTOM_CLEARANCE = 12;
+            const TOP_CLEARANCE = 4;
+            const BOTTOM_CLEARANCE = 0;
             return (
               <div
                 key={`border-${b.name}`}
