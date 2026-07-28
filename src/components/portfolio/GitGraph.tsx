@@ -15,17 +15,22 @@ import { GitGraphAmbientGlow } from "./GitGraphAmbientGlow";
 import { GitGraphLegend } from "./GitGraphLegend";
 import { GitGraphNode } from "./GitGraphNode";
 import { GitGraphCommitRow } from "./GitGraphCommitRow";
+import { GitGraphActiveBorder } from "./GitGraphActiveBorder";
 
 import {
   BRANCH_DEFS,
-  BUGFIX_COLOR,
   BUGFIX_DEFS,
   LAYOUTS,
   PALETTE,
   TOTAL_ROWS,
   branchByProject,
 } from "@/lib/portfolio/gitGraphData";
-import { buildGeometry, branchGlowWindow, drawRange, glowStops } from "@/lib/portfolio/gitGraphGeometry";
+import {
+  buildGeometry,
+  branchGlowWindow,
+  drawRange,
+  glowStops,
+} from "@/lib/portfolio/gitGraphGeometry";
 import { useLayoutTier, usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
 import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 
@@ -46,17 +51,27 @@ export function GitGraph() {
   // animated) dim/undim transition. Without this, every hop between
   // adjacent commits of the same branch flashed the whole graph undimmed
   // for a frame.
-  const [hoveredBranchGroup, setHoveredBranchGroup] = useState<string | null>(null);
+  // `group` is unchanged from before — it's what drives dimming, and for a
+  // bugfix commit it's intentionally the *parent* feature branch's name
+  // (hovering a fix should keep its parent branch lit too). `bugfixKey` is
+  // new: it's only set when the hovered commit is itself a bugfix commit,
+  // and it's what lets the border logic below tell "hovering the feature
+  // branch itself" apart from "hovering its nested bugfix" even though
+  // both share the same `group`. Without this the feature border and the
+  // bugfix border lit up together any time either was hovered.
+  const [hoveredFocus, setHoveredFocus] = useState<{ group: string; bugfixKey?: string } | null>(
+    null,
+  );
   const branchHoverTimeout = useRef<number | undefined>(undefined);
 
-  const focusBranch = (group: string) => {
+  const focusBranch = (group: string, bugfixKey?: string) => {
     window.clearTimeout(branchHoverTimeout.current);
-    setHoveredBranchGroup(group);
+    setHoveredFocus({ group, bugfixKey });
   };
   const unfocusBranch = (group: string) => {
     window.clearTimeout(branchHoverTimeout.current);
     branchHoverTimeout.current = window.setTimeout(() => {
-      setHoveredBranchGroup((g) => (g === group ? null : g));
+      setHoveredFocus((f) => (f?.group === group ? null : f));
     }, 150);
   };
 
@@ -137,7 +152,10 @@ export function GitGraph() {
   // by hand anymore, and every feature branch automatically gets a glow.
   const purpleGlow = useTransform(
     smoothProgress,
-    branchGlowWindow(branchByProject("assetverse").sourceRow, branchByProject("assetverse").mergeRow),
+    branchGlowWindow(
+      branchByProject("assetverse").sourceRow,
+      branchByProject("assetverse").mergeRow,
+    ),
     glowStops(PALETTE.projects.assetverse.accent),
   );
 
@@ -149,13 +167,19 @@ export function GitGraph() {
 
   const cyanGlow = useTransform(
     smoothProgress,
-    branchGlowWindow(branchByProject("asynclangai").sourceRow, branchByProject("asynclangai").mergeRow),
+    branchGlowWindow(
+      branchByProject("asynclangai").sourceRow,
+      branchByProject("asynclangai").mergeRow,
+    ),
     glowStops(PALETTE.projects.asynclangai.accent),
   );
 
   const greenGlow = useTransform(
     smoothProgress,
-    branchGlowWindow(branchByProject("careerpilot").sourceRow, branchByProject("careerpilot").mergeRow),
+    branchGlowWindow(
+      branchByProject("careerpilot").sourceRow,
+      branchByProject("careerpilot").mergeRow,
+    ),
     glowStops(PALETTE.projects.careerpilot.accent),
   );
 
@@ -270,7 +294,9 @@ export function GitGraph() {
     }
   };
 
-  const dimTransition = reduceMotion ? { duration: 0.01 } : { duration: 0.25, ease: "easeOut" as const };
+  const dimTransition = reduceMotion
+    ? { duration: 0.01 }
+    : { duration: 0.25, ease: "easeOut" as const };
 
   // Hovering (or keyboard-focusing) any commit dims every branch except the
   // one it belongs to (main always stays visible, since it's the trunk
@@ -280,9 +306,14 @@ export function GitGraph() {
   // hover always wins over the automatic scroll-focus above, so a person
   // who's deliberately inspecting one branch never gets overridden by
   // scroll position.
-  const focusedBranch = hoveredBranchGroup ?? scrolledBranch ?? undefined;
+  const focusedBranch = hoveredFocus?.group ?? scrolledBranch ?? undefined;
   const isDimmed = (group: string) =>
     Boolean(focusedBranch) && group !== "main" && group !== focusedBranch;
+
+  // Border-only distinction: scroll-driven auto-focus never targets a
+  // bugfix specifically, so it's always the feature border's turn there.
+  // Only an explicit hover on a bugfix commit sets this.
+  const focusedBugfixKey = hoveredFocus?.bugfixKey;
 
   return (
     <>
@@ -303,7 +334,7 @@ export function GitGraph() {
           this fits from small phones up through desktop without clipping. */}
       <div
         ref={containerRef}
-        className="relative w-full max-w-full px-1.5 sm:px-4"
+        className="relative w-full max-w-full overflow-x-clip px-1.5 sm:px-4"
         style={{ height }}
       >
         {/* SVG graph */}
@@ -356,13 +387,16 @@ export function GitGraph() {
             />
           ))}
 
-          {/* bugfix branches — same scroll-scrubbed treatment */}
+          {/* bugfix branches — same scroll-scrubbed treatment. Each now
+              carries its own parent-tinted color (b.color) instead of the
+              flat BUGFIX_COLOR, so a fix still reads as rose but leans
+              toward its own project's hue. */}
           {bugfixBranches.map((b) => (
             <motion.path
               key={b.name}
               d={bugfixPath(b)}
               fill="none"
-              stroke={BUGFIX_COLOR}
+              stroke={b.color}
               strokeWidth={2}
               strokeLinecap="round"
               strokeDasharray="5 4"
@@ -389,6 +423,80 @@ export function GitGraph() {
           ))}
         </svg>
 
+        {/* Active-branch border + continuous light-ray overlay. Sized to
+            each branch's own row span (yOf(sourceRow) .. yOf(mergeRow)) so
+            it never depends on a "card" that doesn't exist in this layout,
+            and it re-derives automatically whenever the tier (and
+            therefore yOf) changes — nothing to keep in sync by hand.
+            `active` reuses the exact same focusedBranch state that
+            already drives dimming, so hover and scroll-focus both light
+            the border in sync with the existing dim/undim behavior. The
+            ray animation itself runs continuously inside
+            GitGraphActiveBorder regardless of `active` — only opacity is
+            gated — so switching the active branch while scrolling is a
+            plain crossfade, never a restart. */}
+        <div
+          className="absolute inset-y-0 right-1.5 sm:right-4 pointer-events-none"
+          style={{ left: `calc(${graphW}px + 1.5rem)` }}
+          aria-hidden="true"
+        >
+          {/* Rebalanced per latest markup: vertical stays tight against
+              the commit range (just a small fixed clearance, not a
+              rowH-scaled stretch — that was overshooting), while
+              horizontal expands well past the text column on both sides
+              for a wider, flatter frame. HORIZONTAL_EXPAND/BOTTOM_CLEARANCE
+              are fixed px (not tier-scaled) since the ask here is a
+              specific flat aspect ratio, not proportional breathing room. */}
+          {branches.map((b) => {
+            const HORIZONTAL_EXPAND = 20; // ~1.25rem each side
+            // CareerPilot's box top was clipping through its first commit
+            // line (label + padding needed more room than other branches
+            // apparently needed) — bumped just for that branch rather than
+            // globally, since the other branches were already fine.
+            const TOP_CLEARANCE = b.projectKey === "careerpilot" ? layout.rowH + 5 : 4;
+            const BOTTOM_CLEARANCE = 12;
+            return (
+              <div
+                key={`border-${b.name}`}
+                className="absolute"
+                style={{
+                  left: -HORIZONTAL_EXPAND,
+                  right: -HORIZONTAL_EXPAND,
+                  top: b.sourceY - TOP_CLEARANCE,
+                  height: b.mergeY - b.sourceY + TOP_CLEARANCE + BOTTOM_CLEARANCE,
+                }}
+              >
+                <GitGraphActiveBorder
+                  active={focusedBranch === b.name && !focusedBugfixKey}
+                  color={b.color}
+                />
+              </div>
+            );
+          })}
+          {bugfixBranches.map((b) => {
+            const HORIZONTAL_EXPAND = 20;
+            const TOP_CLEARANCE = 4;
+            const BOTTOM_CLEARANCE = 12;
+            return (
+              <div
+                key={`border-${b.name}`}
+                className="absolute"
+                style={{
+                  left: -HORIZONTAL_EXPAND,
+                  right: -HORIZONTAL_EXPAND,
+                  top: b.sourceY - TOP_CLEARANCE,
+                  height: b.mergeY - b.sourceY + TOP_CLEARANCE + BOTTOM_CLEARANCE,
+                }}
+              >
+                <GitGraphActiveBorder
+                  active={focusedBranch === b.branchGroup && focusedBugfixKey === b.bugfixKey}
+                  color={b.color}
+                />
+              </div>
+            );
+          })}
+        </div>
+
         {/* Text column — its left offset tracks the (responsive) graph
             width directly, so the two always line up at every tier. */}
         <ul
@@ -406,7 +514,7 @@ export function GitGraph() {
               onOpen={openCommit}
               onEnter={() => {
                 setHovered(n.hash);
-                focusBranch(n.branchGroup);
+                focusBranch(n.branchGroup, n.isBugfix ? n.bugfixKey : undefined);
               }}
               onLeave={() => {
                 setHovered((h) => (h === n.hash ? null : h));

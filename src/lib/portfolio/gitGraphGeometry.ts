@@ -1,8 +1,8 @@
 import {
   BRANCH_DEFS,
-  BUGFIX_COLOR,
   BUGFIX_DEFS,
   BUGFIX_OFFSET_RATIO,
+  bugfixColorForParentLane,
   FEATURE_OFFSET_RATIO,
   hexToRgbTriplet,
   mainCommits,
@@ -40,36 +40,57 @@ export function buildGeometry(layout: Layout) {
     sourceY: yOf(b.sourceRow) + bugfixOffset,
     mergeY: yOf(b.mergeRow) - bugfixOffset,
     branchGroup: laneToBranchName.get(b.parentLane) ?? b.name,
+    color: bugfixColorForParentLane(b.parentLane),
   }));
+
+  // Control points now lead horizontally out of the fork/merge point before
+  // curving vertically, instead of a pure-vertical tangent straight off
+  // mainX. HORIZONTAL_LEAD is how far (as a fraction of the lane distance)
+  // the first/last control point travels sideways while still at the
+  // source/merge row's own Y — that's what gives the curve a natural
+  // "branching outward" feel instead of a sharp vertical-then-diagonal
+  // kink right at the trunk.
+  const HORIZONTAL_LEAD = 0.4;
 
   const branchPath = (b: (typeof branches)[number]): string => {
     const bx = laneX(b.lane);
+    const dx = bx - mainX;
     const firstY = yOf(b.commits[0].row);
     const lastY = yOf(b.commits[b.commits.length - 1].row);
     const c1 = (firstY - b.sourceY) / 2;
     const c2 = (b.mergeY - lastY) / 2;
     return [
       `M ${mainX} ${b.sourceY}`,
-      `C ${mainX} ${b.sourceY + c1}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
+      `C ${mainX + dx * HORIZONTAL_LEAD} ${b.sourceY}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
       `L ${bx} ${lastY}`,
-      `C ${bx} ${lastY + c2}, ${mainX} ${b.mergeY - c2}, ${mainX} ${b.mergeY}`,
+      `C ${bx} ${b.mergeY - c2}, ${mainX + dx * HORIZONTAL_LEAD} ${b.mergeY}, ${mainX} ${b.mergeY}`,
     ].join(" ");
   };
 
   const bugfixPath = (b: (typeof bugfixBranches)[number]): string => {
     const px = laneX(b.parentLane);
     const bx = laneX(b.lane);
+    const dx = bx - px;
     const firstY = yOf(b.commits[0].row);
     const lastY = yOf(b.commits[b.commits.length - 1].row);
     const c1 = (firstY - b.sourceY) / 2;
     const c2 = (b.mergeY - lastY) / 2;
     return [
       `M ${px} ${b.sourceY}`,
-      `C ${px} ${b.sourceY + c1}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
+      `C ${px + dx * HORIZONTAL_LEAD} ${b.sourceY}, ${bx} ${firstY - c1}, ${bx} ${firstY}`,
       `L ${bx} ${lastY}`,
-      `C ${bx} ${lastY + c2}, ${px} ${b.mergeY - c2}, ${px} ${b.mergeY}`,
+      `C ${bx} ${b.mergeY - c2}, ${px + dx * HORIZONTAL_LEAD} ${b.mergeY}, ${px} ${b.mergeY}`,
     ].join(" ");
   };
+
+  // COMMIT_STAGGER was 0.06 — too small to read as a deliberate cascade,
+  // especially once several rows cross the viewport threshold in the same
+  // scroll tick (see GitGraphCommitRow's lowered `amount` for the other
+  // half of this fix). 0.09 is the smallest step that still reads as
+  // "terminal log lines landing one after another" without feeling
+  // sluggish to wait through.
+  const COMMIT_STAGGER = 0.09;
+  const BRANCH_STAGGER = 0.15;
 
   const allNodes: NodeMeta[] = [
     ...mainCommits.map((c, i) => ({
@@ -81,7 +102,7 @@ export function buildGeometry(layout: Layout) {
       textColor: c.hash === "HEAD" ? PALETTE.head : PALETTE.mainText,
       isHead: c.hash === "HEAD",
       isMain: true,
-      revealDelay: i * 0.06,
+      revealDelay: i * COMMIT_STAGGER,
       branchGroup: "main",
     })),
     ...branches.flatMap((b, bi) =>
@@ -92,7 +113,7 @@ export function buildGeometry(layout: Layout) {
         message: c.message,
         color: b.color,
         textColor: PALETTE.projects[b.projectKey].text,
-        revealDelay: bi * 0.1 + i * 0.06,
+        revealDelay: bi * BRANCH_STAGGER + i * COMMIT_STAGGER,
         projectKey: b.projectKey,
         commitIndex: i,
         commitTotal: b.commits.length,
@@ -106,10 +127,10 @@ export function buildGeometry(layout: Layout) {
         y: yOf(c.row),
         hash: c.hash,
         message: c.message,
-        color: BUGFIX_COLOR,
-        textColor: BUGFIX_COLOR,
+        color: b.color,
+        textColor: b.color,
         isBugfix: true,
-        revealDelay: bi * 0.1 + i * 0.06,
+        revealDelay: bi * BRANCH_STAGGER + i * COMMIT_STAGGER,
         bugfixKey: b.bugfixKey,
         bugfixCommitIndex: i,
         branchName: i === 0 ? b.name : undefined,

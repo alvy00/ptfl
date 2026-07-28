@@ -17,28 +17,49 @@ export type Project = {
 export const projects: Record<ProjectKey, Project> = {
   auctasync: {
     key: "auctasync",
-    name: "AuctaSync — Auction Web Platform",
+    name: "AuctaSync — Real-Time Auction Platform",
     timeframe: { start: "2024-11-01", end: "2025-08-31", label: "Nov 2024 – Aug 2025" },
     description:
-      "Built a full-stack real-time auction platform that replaces the friction of traditional, in-person auctions with an engaging digital experience — enabling users to participate in live, competitive bidding from anywhere with instant updates and secure transactions.",
+      "Full-stack, decoupled auction ecosystem engineered for high-concurrency, live bidding at the speed and reliability luxury marketplaces demand. Architected a WebSocket real-time layer to broadcast bid events to every connected client in a lot with zero page refreshes, backed by Supabase (PostgreSQL) with row-level security and an integrated local payment gateway — solving the core trust and latency problems that make digital auctions feel slower or less secure than in-person ones.",
     features: [
       {
-        title: "Live Auctions",
+        title: "Real-Time Bid Broadcasting",
         detail:
-          "Time-sensitive sessions with synchronized countdown timers for accurate bid windows.",
+          "Dedicated WebSocket service pushes live bid updates to every client in a lot instantly, eliminating stale data and race conditions under high-traffic bidding.",
       },
       {
-        title: "Real-Time Bidding Updates",
+        title: "Secure, Session-Aware Auth",
         detail:
-          "WebSocket-based live bid broadcasting — no stale data or race conditions in high-traffic rooms.",
+          "Supabase Auth with SSR-aware sessions and row-level security policies enforced at the database layer, not just the API.",
       },
       {
-        title: "Secure Payment Integration",
+        title: "Integrated Payments & Checkout",
         detail:
-          "SSLCommerz gateway with a coupon discount system for safe, localized transactions.",
+          "End-to-end checkout and settlement via the SSLCommerz gateway, with coupon-based discounting built into the payment flow.",
+      },
+      {
+        title: "Decoupled, Scalable Architecture",
+        detail:
+          "Next.js App Router frontend, a separate API/server-actions layer, and an independent WebSocket service — each scalable and deployable on its own.",
+      },
+      {
+        title: "Live Auction Analytics",
+        detail:
+          "Real-time charts on active lots and bid activity (Chart.js) plus drag-and-drop listing management with image uploads.",
       },
     ],
-    stack: ["Next.js", "Node.js", "Express.js", "PostgreSQL", "Tailwind CSS", "SSLCommerz"],
+    stack: [
+      "Next.js 15 (App Router, Turbopack)",
+      "TypeScript",
+      "React 19",
+      "Supabase (PostgreSQL, Auth, RLS)",
+      "WebSockets",
+      "SSLCommerz",
+      "Tailwind CSS 4",
+      "Radix UI / shadcn",
+      "Framer Motion / GSAP",
+      "Chart.js",
+    ],
     demoUrl: "https://auctasync.vercel.app/",
     codeLinks: [
       { label: "View Code", url: "https://github.com/alvy00/asyncawait-auction-project-v2" },
@@ -47,36 +68,47 @@ export const projects: Record<ProjectKey, Project> = {
   },
   assetverse: {
     key: "assetverse",
-    name: "AssetVerse — Asset Management System",
-    timeframe: { start: "2024-03-26", end: "2024-4-15", label: "Mar 2024 – April 2025" },
+    name: "AssetVerse — B2B Asset Management SaaS",
+    timeframe: { start: "2024-03-26", end: "2024-05-15", label: "Mar 2024 – May 2025" },
     description:
-      "Developed a full-stack organizational asset management platform that replaces scattered spreadsheets and manual tracking with a centralized, role-based (RBAC) system for asset allocation, lifecycle management, and team-wide visibility.",
+      "Full-stack, multi-tenant B2B SaaS that replaces spreadsheet-driven asset tracking with a centralized, role-based system for organizations to allocate, monitor, and audit company assets across every employee. Designed a subscription-gated company model where each employee account can independently affiliate with multiple companies simultaneously, with a decoupled Express/MongoDB API powering the whole platform.",
     features: [
       {
-        title: "Employee-Wise Assignment & Tracking",
+        title: "Role-Based Company & Asset Management",
         detail:
-          "Dynamic assignment links assets to employees so HR and admins see ownership and location in real time.",
+          "HR managers register a company (default 5-seat subscription), manage full asset inventory, and assign/reclaim assets with returnable vs. non-returnable tracking.",
       },
       {
-        title: "Asset Management Workflow",
+        title: "Multi-Company Employee Model",
         detail:
-          "Status workflow (Assigned, Available, Under Maintenance) reflects real-time availability and reduces misallocation.",
+          "Employees register independently and can be affiliated with and request assets from multiple companies at once — a genuinely multi-tenant relationship, not a simple 1:1 org chart.",
       },
       {
-        title: "History & Usage Logs",
+        title: "Full Asset Lifecycle Audit Trail",
         detail:
-          "Audit trail records full lifecycle events for accountability and data-driven insights.",
+          "Every asset moves through Inventory → Assignment → Return with full status visibility, supporting accountability and loss prevention.",
+      },
+      {
+        title: "Analytics & Exportable Reporting",
+        detail:
+          "Interactive Recharts dashboards plus print-friendly, PDF-exportable reports (jsPDF) for HR review and audits.",
+      },
+      {
+        title: "Subscriptions & Payments",
+        detail:
+          "Stripe-backed subscription billing tied to company seat limits, decoupled behind a dedicated Express/MongoDB API with Firebase Admin-verified auth.",
       },
     ],
     stack: [
-      "Next.js",
-      "Node.js",
-      "Express.js",
+      "React 19",
+      "Vite",
+      "Node.js / Express.js",
       "MongoDB",
-      "Firebase",
-      "Tailwind CSS",
+      "Firebase Auth / Admin SDK",
       "Stripe",
       "TanStack Query",
+      "Tailwind CSS + DaisyUI",
+      "Recharts",
     ],
     demoUrl: "https://ph-assetverse-client-a11.netlify.app/",
     codeLinks: [
@@ -87,69 +119,97 @@ export const projects: Record<ProjectKey, Project> = {
   },
   asynclangai: {
     key: "asynclangai",
-    name: "AsyncLangAI — English Language Practice Platform",
+    name: "AsyncLangAI — AI Voice-Based English Practice Platform",
     timeframe: { start: "2025-04-01", end: "2025-06-30", label: "Apr 2025 – Jun 2025" },
     description:
-      "Built a full-stack English practice platform that solves the lack of real-time speaking practice by putting an AI conversational agent in the loop — giving learners a live partner to talk to, instant feedback on how they did, and concrete guidance on what to improve next.",
+      "Full-stack conversational practice platform that closes the biggest gap in self-taught language learning — the lack of a real speaking partner — by putting a live AI voice agent (Vapi) in the loop instead of static, text-based drills. Learners run custom mock interviews tailored to their target role, get instant AI-generated performance feedback, and receive concrete next steps, with background scoring/feedback jobs offloaded to a Redis-backed queue so the conversation itself never blocks on analysis.",
     features: [
       {
+        title: "Live AI Voice Conversations",
+        detail:
+          "Real-time, natural spoken practice sessions via the Vapi AI Web SDK — not scripted text chat.",
+      },
+      {
         title: "Custom Virtual Interviews",
-        detail: "Create tailored mock interviews based on your specific roles and needs.",
+        detail:
+          "Users generate mock interviews tailored to specific roles and goals, powered by Google Gemini through the Vercel AI SDK.",
       },
       {
-        title: "Real-Time AI Conversations",
-        detail: "Practice speaking fluidly with an interactive AI agent in real time.",
+        title: "Asynchronous Feedback Pipeline",
+        detail:
+          "Redis + Bull job queue processes performance scoring and feedback generation in the background, keeping the live session responsive.",
       },
       {
-        title: "Instant Performance Feedback",
-        detail: "Review detailed insights and analytics immediately following each session.",
+        title: "Instant, Actionable Feedback",
+        detail:
+          "Detailed post-session analytics and targeted improvement tips are surfaced immediately after each practice run.",
       },
       {
-        title: "Targeted Guidance & Advice",
-        detail: "Receive actionable tips and recommendations to improve your communication skills.",
+        title: "Secure Auth & Type-Safe Forms",
+        detail:
+          "Firebase Authentication (client + Admin SDK) with Zod-validated, react-hook-form-driven inputs throughout.",
       },
     ],
-    stack: ["Next.js", "Node.js", "Express.js", "Firebase", "shadcn/ui", "Tailwind CSS"],
+    stack: [
+      "Next.js 15",
+      "TypeScript",
+      "React 19",
+      "Vapi AI (voice agent)",
+      "Google Gemini / Vercel AI SDK",
+      "Firebase Auth / Admin SDK",
+      "Redis + Bull (job queue)",
+      "Zod",
+      "Tailwind CSS / Radix UI",
+    ],
     demoUrl: "https://asynclangai.vercel.app/",
     codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/LangAI" }],
     accent: "#38bdf8",
   },
   careerpilot: {
     key: "careerpilot",
-    name: "CareerPilot — AI Learning and Roadmap Generator",
+    name: "CareerPilot — AI Learning Roadmap & Interview Platform",
     timeframe: { start: "2026-02-01", end: "2026-03-31", label: "Feb 2026 – Mar 2026" },
     description:
-      "Engineered a full-stack AI-powered career platform that eliminates tutorial hell and directionless self-learning by analyzing users' requirements and target roles to generate structured, adaptive roadmaps — helping learners focus on what matters and accelerate their path to knowledge.",
+      "Full-stack AI learning companion that turns any goal — a tech career, an academic subject, a certification, or a practical skill — into a structured, phase-based roadmap instead of open-ended tutorial hell. Combines generative AI (Gemini) for adaptive roadmap and quiz generation with a live voice AI agent (Vapi) for spoken interview and oral-exam practice, all inside a single unified Next.js application with no separate backend service to deploy.",
     features: [
       {
-        title: "AI-Powered Roadmap Generation",
+        title: "AI-Generated, Phase-Based Roadmaps",
         detail:
-          "LLM-driven engine evaluates proficiency and generates personalized, step-by-step learning paths for specific goals.",
+          "Gemini generates structured Beginner → Advanced learning plans from a goal, experience level, and time commitment, validated end-to-end with Zod schemas.",
       },
       {
-        title: "AI Mock Voice Interviews",
+        title: "AI Voice Mock Interviews",
         detail:
-          "Voice-based interview simulations with real-time AI feedback for role-specific practice.",
+          "Live, spoken interview and oral-exam simulations via Vapi's voice AI agent — real conversational flow instead of static Q&A forms.",
       },
       {
-        title: "AI Quizzes & Challenges",
+        title: "Adaptive AI Quizzes",
         detail:
-          "Adaptive system auto-generates role-specific quizzes to reinforce milestones and track progress.",
+          "On-demand quizzes generated per roadmap phase to validate understanding before a learner advances to the next milestone.",
       },
       {
-        title: "Personalized Resource Recommendations",
+        title: "Scheduling & Progress Tracking",
         detail:
-          "Intelligent engine curates tutors and learning materials based on individual progress data.",
+          "Interactive calendar (Schedule-X) for milestone planning, with persistent tracking of roadmap completion, quiz scores, and interview practice history in MongoDB.",
+      },
+      {
+        title: "Unified Full-Stack Architecture",
+        detail:
+          "Next.js App Router handles UI, API routes, and server-side Firebase Admin auth verification in one deployable app — no separate backend to maintain.",
       },
     ],
     stack: [
-      "Next.js",
-      "Node.js",
+      "Next.js 16 (App Router)",
+      "TypeScript",
+      "React 19",
       "MongoDB",
-      "Firebase",
-      "Tailwind CSS",
-      "Stripe",
+      "Google Gemini (AI SDK)",
+      "Vapi AI (voice agent)",
+      "Firebase Auth / Admin SDK",
       "TanStack Query",
+      "Zod",
+      "Tailwind CSS v4 + DaisyUI",
+      "GSAP / Framer Motion",
     ],
     demoUrl: "https://careerpilotasync.vercel.app/",
     codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/eg-careerpilot-asyncawait" }],

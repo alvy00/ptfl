@@ -15,6 +15,7 @@ export const mainCommitContent: CommitContent[] = [
   },
   { hash: "q4r5s6t", message: "learn: Next.js and GSAP" },
   { hash: "u7v8w9x", message: "learn: AI, LLMs, and RAG" },
+  { hash: "v1e2c3t", message: "learn: Vector DBs" },
   { hash: "HEAD", message: "open to internship / junior developer roles" },
 ];
 

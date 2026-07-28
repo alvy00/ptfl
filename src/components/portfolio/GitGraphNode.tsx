@@ -31,10 +31,16 @@ export function GitGraphNode({
 
   const nodeIdleTransition = (delay: number) =>
     reduceMotion ? { duration: 0.01 } : { duration: 0.35, ease: "easeOut" as const, delay };
+  // Snappier than the old 300/20 — a magnetic hover should feel like it
+  // *snapped* to the cursor, not eased into place. Only used for the
+  // active (hover/highlight) state; idle reveal keeps its own gentler
+  // timing above so the initial graph draw-in isn't sped up too.
   const nodeActiveTransition = reduceMotion
     ? { duration: 0.01 }
-    : { type: "spring" as const, stiffness: 300, damping: 20 };
-  const dimTransition = reduceMotion ? { duration: 0.01 } : { duration: 0.25, ease: "easeOut" as const };
+    : { type: "spring" as const, stiffness: 420, damping: 22, mass: 0.6 };
+  const dimTransition = reduceMotion
+    ? { duration: 0.01 }
+    : { duration: 0.25, ease: "easeOut" as const };
 
   return (
     <motion.g
@@ -44,12 +50,24 @@ export function GitGraphNode({
       animate={{
         scale: isHovered || isHighlighted ? 1.25 : 1,
         opacity: dimmed ? 0.3 : 1,
+        // Brightness lift is what actually sells "alive" — pure scale
+        // reads as "bigger," scale + brightness reads as "lit up."
+        // Highlighted (the click-pulse ring state) skips this since it
+        // already has its own dedicated glow ring below; stacking a
+        // second brightness pass on top of that would blow it out.
+        filter: isHovered && !isHighlighted ? "brightness(1.35)" : "brightness(1)",
       }}
       transition={{
-        scale: isHovered || isHighlighted ? nodeActiveTransition : nodeIdleTransition(n.revealDelay),
+        scale:
+          isHovered || isHighlighted ? nodeActiveTransition : nodeIdleTransition(n.revealDelay),
         opacity: dimTransition,
+        filter: reduceMotion ? { duration: 0.01 } : { duration: 0.2, ease: "easeOut" },
       }}
-      style={{ transformOrigin: `${n.x}px ${n.y}px`, willChange: "transform, opacity" }}
+      style={{
+        transformOrigin: `${n.x}px ${n.y}px`,
+        willChange: "transform, opacity, filter",
+        cursor: "pointer",
+      }}
     >
       {n.isHead && (
         <motion.circle
@@ -61,7 +79,10 @@ export function GitGraphNode({
           animate={
             reduceMotion
               ? { opacity: 0.3 }
-              : { r: [12.5 * nodeScale, 20 * nodeScale, 12.5 * nodeScale], opacity: [0.45, 0.05, 0.45] }
+              : {
+                  r: [12.5 * nodeScale, 20 * nodeScale, 12.5 * nodeScale],
+                  opacity: [0.45, 0.05, 0.45],
+                }
           }
           transition={
             reduceMotion ? { duration: 0.01 } : { duration: 2, repeat: Infinity, ease: "easeInOut" }
@@ -79,17 +100,31 @@ export function GitGraphNode({
           strokeWidth={2}
           initial={{ r: baseR, opacity: 0.9 }}
           animate={{ r: baseR + 18, opacity: 0 }}
-          transition={reduceMotion ? { duration: 0.2 } : { duration: 1.2, ease: "easeOut", repeat: 1 }}
+          transition={
+            reduceMotion ? { duration: 0.2 } : { duration: 1.2, ease: "easeOut", repeat: 1 }
+          }
           style={{ filter: `drop-shadow(0 0 8px ${n.color})`, willChange: "transform, opacity" }}
         />
       )}
-      {(isHovered || isHighlighted) && !n.isHead && (
+      {isHovered && !n.isHead && !isHighlighted && (
+        <motion.circle
+          cx={n.x}
+          cy={n.y}
+          fill={n.color}
+          initial={{ r: baseR, opacity: 0 }}
+          animate={{ r: baseR + 7, opacity: 0.32 }}
+          exit={{ r: baseR, opacity: 0 }}
+          transition={nodeActiveTransition}
+          style={{ filter: `drop-shadow(0 0 10px ${n.color})`, willChange: "transform, opacity" }}
+        />
+      )}
+      {isHighlighted && !n.isHead && (
         <circle
           cx={n.x}
           cy={n.y}
           r={baseR + 5}
           fill={n.color}
-          opacity={isHighlighted ? 0.4 : 0.25}
+          opacity={0.4}
           style={{ filter: `drop-shadow(0 0 6px ${n.color})` }}
         />
       )}

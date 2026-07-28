@@ -12,10 +12,14 @@ import {
 import type { BranchDef, BugfixDef, Commit, Layout, MainCommit, Tier } from "./gitGraphTypes";
 
 export const LAYOUTS: Record<Tier, Layout> = {
-  xs: { rowH: 56, topPad: 40, mainX: 12, laneW: 17, nodeScale: 0.8 }, // <400px
-  sm: { rowH: 60, topPad: 44, mainX: 16, laneW: 23, nodeScale: 0.88 }, // 400-639px
-  md: { rowH: 66, topPad: 48, mainX: 20, laneW: 30, nodeScale: 0.96 }, // 640-1023px
-  lg: { rowH: 68, topPad: 52, mainX: 24, laneW: 34, nodeScale: 1 }, // 1024px+
+  // rowH bumped +6px per tier (topPad +2-4px to match) for more breathing
+  // room between commit lines/blocks. TOTAL_ROWS and all row-plan math are
+  // untouched — yOf() is a pure function of rowH, so this scales the whole
+  // graph's vertical rhythm without touching topology.
+  xs: { rowH: 72, topPad: 46, mainX: 12, laneW: 17, nodeScale: 0.8 }, // <400px
+  sm: { rowH: 78, topPad: 50, mainX: 16, laneW: 23, nodeScale: 0.88 }, // 400-639px
+  md: { rowH: 86, topPad: 54, mainX: 20, laneW: 30, nodeScale: 0.96 }, // 640-1023px
+  lg: { rowH: 90, topPad: 58, mainX: 24, laneW: 34, nodeScale: 1 }, // 1024px+
 };
 
 // Fixed offsets (in the old code: +27 / -27 and +24 / -24) expressed as a
@@ -63,22 +67,47 @@ export function hexToRgbTriplet(hex: string): string {
   return `${r}, ${g}, ${b}`;
 }
 
-export const TOTAL_LANES = 7;
-export const TOTAL_ROWS = 26;
+// Blends two hex colors: t=0 -> pure a, t=1 -> pure b.
+function mixHex(a: string, b: string, t: number): string {
+  const pa = a.replace("#", "");
+  const pb = b.replace("#", "");
+  const ar = parseInt(pa.slice(0, 2), 16),
+    ag = parseInt(pa.slice(2, 4), 16),
+    ab = parseInt(pa.slice(4, 6), 16);
+  const br = parseInt(pb.slice(0, 2), 16),
+    bg = parseInt(pb.slice(2, 4), 16),
+    bb = parseInt(pb.slice(4, 6), 16);
+  const mix = (x: number, y: number) => Math.round(x + (y - x) * t);
+  const toHex = (n: number) => n.toString(16).padStart(2, "0");
+  return `#${toHex(mix(ar, br))}${toHex(mix(ag, bg))}${toHex(mix(ab, bb))}`;
+}
 
-// Row plan (26 rows total, 0-25), verified for full coverage with no
+// Bugfix branches keep rose as the dominant hue (so "this is a fix" still
+// reads at a glance) but pull 32% toward their parent project's accent, so
+// the fix curve doesn't clash as hard against its own project's palette.
+// Base BUGFIX_COLOR is untouched/still exported for anything generic (e.g.
+// the legend, which explains the shape/concept without tying to one project).
+function bugfixTint(projectAccent: string): string {
+  return mixHex(BUGFIX_COLOR, projectAccent, 0.32);
+}
+
+export const TOTAL_LANES = 7;
+export const TOTAL_ROWS = 27;
+
+// Row plan (27 rows total, 0-26), verified for full coverage with no
 // gaps/collisions before this was written:
 // 0 enroll | 1 learn(react/html/css/tailwind/node/framer/express)
 // 2-5 AssetVerse | 6 achieve(bootcamp) | 7 learn(nextjs/gsap)
 // 8-13 AuctaSync (10-11 = its bugfix) | 14 learn(ai/llm/rag)
-// 15-18 AsyncLangAI | 19-24 CareerPilot (22-23 = its bugfix) | 25 HEAD
-const MAIN_ROWS = [0, 1, 6, 7, 14, 25];
+// 15-18 AsyncLangAI | 19 learn(vector db) | 20-25 CareerPilot
+// (23-24 = its bugfix) | 26 HEAD
+const MAIN_ROWS = [0, 1, 6, 7, 14, 19, 26];
 const ASSETVERSE_ROWS = [2, 3, 4, 5];
 const AUCTASYNC_ROWS = [8, 9, 12, 13];
 const AUCTASYNC_BUGFIX_ROWS = [10, 11];
 const ASYNCLANGAI_ROWS = [15, 16, 17, 18];
-const CAREERPILOT_ROWS = [19, 20, 21, 24];
-const CAREERPILOT_BUGFIX_ROWS = [22, 23];
+const CAREERPILOT_ROWS = [20, 21, 22, 25];
+const CAREERPILOT_BUGFIX_ROWS = [23, 24];
 
 const withRows = (content: Commit[], rows: number[]): (Commit & { row: number })[] =>
   content.map((c, i) => ({ ...c, row: rows[i] }));
@@ -122,8 +151,8 @@ export const BRANCH_DEFS: BranchDef[] = [
     projectKey: "careerpilot",
     color: PALETTE.projects.careerpilot.accent,
     lane: 5,
-    sourceRow: 19,
-    mergeRow: 25,
+    sourceRow: 20,
+    mergeRow: 26,
     delay: 2.0,
     commits: withRows(careerpilotCommitContent, CAREERPILOT_ROWS),
   },
@@ -145,8 +174,8 @@ export const BUGFIX_DEFS: BugfixDef[] = [
     bugfixKey: "careerpilot-session-state",
     parentLane: 5,
     lane: 6,
-    sourceRow: 21,
-    mergeRow: 24,
+    sourceRow: 22,
+    mergeRow: 25,
     delay: 2.4,
     commits: withRows(careerpilotBugfixCommitContent, CAREERPILOT_BUGFIX_ROWS),
   },
@@ -156,6 +185,16 @@ export const TOTAL_COMMIT_COUNT =
   mainCommits.length +
   BRANCH_DEFS.reduce((sum, b) => sum + b.commits.length, 0) +
   BUGFIX_DEFS.reduce((sum, b) => sum + b.commits.length, 0);
+
+// Resolves a bugfix's own display color from its parent branch's project
+// accent, computed once here (not per-render) since BRANCH_DEFS/PALETTE
+// are both static. Falls back to plain BUGFIX_COLOR if a parent lane ever
+// doesn't resolve, rather than throwing — this is decorative, not critical.
+export function bugfixColorForParentLane(parentLane: number): string {
+  const parent = BRANCH_DEFS.find((b) => b.lane === parentLane);
+  if (!parent) return BUGFIX_COLOR;
+  return bugfixTint(PALETTE.projects[parent.projectKey].accent);
+}
 
 export function branchByProject(key: ProjectKey): BranchDef {
   const b = BRANCH_DEFS.find((d) => d.projectKey === key);
