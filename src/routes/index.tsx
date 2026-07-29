@@ -82,7 +82,10 @@ export function Index() {
             </div>
 
             {/* REST OF THE PAGE CONTENT: Flows naturally right after the hero */}
-            <div className="mx-auto max-w-4xl w-full px-4 sm:px-8 pb-20 relative z-20 bg-[#0e0f13] pt-12">
+            <div
+              id="page-content"
+              className="mx-auto max-w-4xl w-full px-4 sm:px-8 pb-20 relative z-20 bg-[#0e0f13] pt-12"
+            >
               {/* "The Journey" Title Arrival */}
               <div className="pt-4 pb-8">
                 <motion.div

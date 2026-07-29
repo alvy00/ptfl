@@ -26,12 +26,7 @@ import {
   TOTAL_ROWS,
   branchByProject,
 } from "@/lib/portfolio/gitGraphData";
-import {
-  buildGeometry,
-  branchGlowWindow,
-  drawRange,
-  glowStops,
-} from "@/lib/portfolio/gitGraphGeometry";
+import { buildGeometry, drawRange } from "@/lib/portfolio/gitGraphGeometry";
 import { useLayoutTier, usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
 import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 
@@ -147,42 +142,6 @@ export function GitGraph() {
       setScrolledBranch(name);
     }
   });
-
-  // Each glow window is derived directly from that project's branch
-  // sourceRow/mergeRow (see BRANCH_DEFS) — there's nothing to keep in sync
-  // by hand anymore, and every feature branch automatically gets a glow.
-  const purpleGlow = useTransform(
-    smoothProgress,
-    branchGlowWindow(
-      branchByProject("assetverse").sourceRow,
-      branchByProject("assetverse").mergeRow,
-    ),
-    glowStops(PALETTE.projects.assetverse.accent),
-  );
-
-  const amberGlow = useTransform(
-    smoothProgress,
-    branchGlowWindow(branchByProject("auctasync").sourceRow, branchByProject("auctasync").mergeRow),
-    glowStops(PALETTE.projects.auctasync.accent),
-  );
-
-  const cyanGlow = useTransform(
-    smoothProgress,
-    branchGlowWindow(
-      branchByProject("asynclangai").sourceRow,
-      branchByProject("asynclangai").mergeRow,
-    ),
-    glowStops(PALETTE.projects.asynclangai.accent),
-  );
-
-  const greenGlow = useTransform(
-    smoothProgress,
-    branchGlowWindow(
-      branchByProject("careerpilot").sourceRow,
-      branchByProject("careerpilot").mergeRow,
-    ),
-    glowStops(PALETTE.projects.careerpilot.accent),
-  );
 
   // Branch lines draw in — and un-draw on scroll-up — scrubbed directly to
   // scroll position, rather than a one-shot whileInView animation. Declared
@@ -316,17 +275,22 @@ export function GitGraph() {
   // Only an explicit hover on a bugfix commit sets this.
   const focusedBugfixKey = hoveredFocus?.bugfixKey;
 
+  // The ambient glow's one saturated note. Reuses focusedBranch as-is — no
+  // separate "which color should glow" tracking — so hovering a commit and
+  // scrolling past a branch both drive the same color the border/dimming
+  // already react to, instead of a second, slightly-out-of-sync source of
+  // truth. Bugfix commits keep their parent feature branch as focusedBranch
+  // (see the `group` comment above `hoveredFocus`), so this naturally
+  // resolves to that project's accent for those too, not a special case.
+  const focusedColor = focusedBranch
+    ? (BRANCH_DEFS.find((b) => b.name === focusedBranch)?.color ?? null)
+    : null;
+
   return (
     <>
       <GitGraphScrollProgress progress={spineProgress} />
 
-      <GitGraphAmbientGlow
-        purple={purpleGlow}
-        amber={amberGlow}
-        cyan={cyanGlow}
-        green={greenGlow}
-        reduceMotion={reduceMotion}
-      />
+      <GitGraphAmbientGlow activeColor={focusedColor} reduceMotion={reduceMotion} />
 
       <GitGraphLegend />
 

@@ -1,5 +1,6 @@
 import { motion, useMotionValueEvent, useTransform } from "framer-motion";
 import { useRef } from "react";
+import { createPortal } from "react-dom";
 
 import { PALETTE, TOTAL_COMMIT_COUNT } from "@/lib/portfolio/gitGraphData";
 
@@ -21,7 +22,24 @@ export function GitGraphScrollProgress({
     if (countRef.current) countRef.current.textContent = String(count);
   });
 
-  return (
+  // Portaled straight to <body> rather than rendered in place. GitGraph
+  // (and therefore this component) is mounted deep inside index.tsx's
+  // `whileInView` motion.div wrapper around the GlobalSearch/GitGraph
+  // section — while that wrapper's reveal animation is playing it carries
+  // an inline `transform`, which creates a new containing block for any
+  // `position: fixed` descendant. Without the portal, that briefly pins
+  // this bar/counter to the wrapper's box (making it appear parked next
+  // to the search input) instead of the viewport, until the animation
+  // finishes and the transform is cleared. Rendering into `document.body`
+  // sidesteps that entirely — this is always fixed to the true viewport,
+  // regardless of what transforms exist anywhere in the React tree above
+  // it. Guarded for SSR/hydration since `document` isn't available server-
+  // side; TanStack Router's client render will have `document` by the
+  // time this component actually mounts and runs its effects, but the
+  // guard keeps this safe if it's ever imported somewhere with SSR.
+  if (typeof document === "undefined") return null;
+
+  return createPortal(
     <>
       <motion.div
         aria-hidden="true"
@@ -45,6 +63,7 @@ export function GitGraphScrollProgress({
       >
         <span ref={countRef}>0</span> / {TOTAL_COMMIT_COUNT}
       </div>
-    </>
+    </>,
+    document.body,
   );
 }
