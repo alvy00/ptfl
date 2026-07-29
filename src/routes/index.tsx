@@ -163,7 +163,7 @@ export function Index() {
       return;
     }
     if (delta > SCROLL_DELTA_THRESHOLD) {
-      searchHideY.set(-searchBarHeightRef.current * 0.7);
+      searchHideY.set(-searchBarHeightRef.current * 0.85);
     } else if (delta < -SCROLL_DELTA_THRESHOLD) {
       searchHideY.set(0);
     }

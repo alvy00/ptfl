@@ -19,6 +19,7 @@ export function GitGraphCommitRow({
   onEnter,
   onLeave,
   progress,
+  rowH,
 }: {
   n: NodeMeta;
   isHovered: boolean;
@@ -32,8 +33,15 @@ export function GitGraphCommitRow({
    *  GitGraphNode use — keeps this row's reveal reversible on scroll-up,
    *  in sync with the graph line/dot instead of a one-shot whileInView. */
   progress: MotionValue<number>;
+  /** Current tier's row height (layout.rowH in GitGraph.tsx) — used only
+   *  as the `contain-intrinsic-size` guess for content-visibility below,
+   *  so the browser has a reasonable height to reserve for an off-screen,
+   *  not-yet-painted row instead of collapsing it to 0 and causing a
+   *  scroll-position jump the first time it's actually measured. */
+  rowH: number;
 }) {
   const isMilestone = n.message.toLowerCase().includes("milestone");
+  const pointerCoarse = usePointerCoarse();
   // HEAD is the terminus of the whole graph — the peak-end moment, where a
   // visitor who's scrolled the entire commit history lands right as the
   // "open to work" copy appears. Treating it like every other trunk commit
@@ -99,7 +107,6 @@ export function GitGraphCommitRow({
   useMotionValueEvent(rowOpacity, "change", (v) => {
     if (v >= 1 && !inView) setInView(true);
   });
-  const pointerCoarse = usePointerCoarse();
   // Touch scroll can enter several rows in the same second; coarser,
   // fewer-frame ticks keep that from adding busy work mid-scroll. Desktop
   // keeps the snappier default.
@@ -131,6 +138,21 @@ export function GitGraphCommitRow({
         opacity: dimmed ? 0.35 : 1,
         transition: reduceMotion ? undefined : "opacity 250ms ease-out",
         pointerEvents: reduceMotion ? "auto" : rowPointerEvents,
+        // Skips layout/paint work entirely for rows the browser doesn't
+        // think are near the viewport — desktop-only concern is mobile
+        // frame rate during fast scroll-throughs, so this is gated to
+        // coarse pointers rather than applied everywhere. Left off
+        // desktop deliberately: content-visibility:auto can delay the
+        // very first paint/hit-test of a row right after a fast
+        // scroll-to-hover, and desktop's hover-driven focus/border-ignite
+        // interactions depend on that being immediate — a tradeoff worth
+        // making on mobile (no hover to protect) but not on desktop.
+        // contain-intrinsic-size uses `rowH` as a reasonable placeholder
+        // height for an unpainted row, so the page doesn't jump once the
+        // browser actually measures it.
+        contentVisibility: pointerCoarse ? "auto" : undefined,
+        containIntrinsicWidth: pointerCoarse ? "auto" : undefined,
+        containIntrinsicHeight: pointerCoarse ? `${rowH}px` : undefined,
       }}
     >
       {/* branch context label */}

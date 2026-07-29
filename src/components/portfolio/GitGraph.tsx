@@ -556,6 +556,7 @@ export function GitGraph() {
               dimmed={isDimmed(n.branchGroup)}
               reduceMotion={reduceMotion}
               progress={smoothProgress}
+              rowH={layout.rowH}
               onOpen={openCommit}
               onEnter={() => {
                 setHovered(n.hash);

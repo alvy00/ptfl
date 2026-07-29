@@ -19,95 +19,174 @@ export const mainCommitContent: CommitContent[] = [
   { hash: "HEAD", message: "open to internship / junior developer roles" },
 ];
 
+// 7 commits, in the same order as AUCTASYNC_ROWS = [9,10,13,14,15,16,17] —
+// commit2 (row10) and commit3 (row13) are where the bugfix branch is
+// bracketed from (rows 11-12 sit between them).
 export const auctasyncCommitContent: CommitContent[] = [
-  { hash: "b1c2d3e", message: "feat(auctasync): scaffold real-time auction platform" },
-  { hash: "b4f5g6h", message: "feat(auctasync): implement WebSocket bidding core" },
-  { hash: "b7i8j9k", message: "feat(auctasync): integrate SSLCommerz payment gateway" },
+  {
+    hash: "b1c2d3e",
+    message:
+      "feat(auctasync): scaffold decoupled real-time auction platform — Next.js frontend, independent WebSocket service",
+  },
+  {
+    hash: "b4f5g6h",
+    message:
+      "feat(auctasync): implement WebSocket bid broadcasting with Supabase Auth + row-level security",
+  },
+  {
+    hash: "b2n3o4p",
+    message:
+      "feat(auctasync): implement drag-and-drop lot listing management with image uploads and per-lot bid history",
+  },
+  {
+    hash: "b7i8j9k",
+    message:
+      "feat(auctasync): integrate SSLCommerz checkout with coupon support and Chart.js auction analytics",
+  },
+  {
+    hash: "b5q6r7s",
+    message:
+      "feat(auctasync): polish UI with Radix/shadcn primitives and Framer Motion/GSAP animations",
+  },
+  {
+    hash: "b8t9u0v",
+    message:
+      "feat(auctasync): harden decoupled architecture — isolate auction API/server-actions from the WebSocket broadcast service for independent scaling",
+  },
   {
     hash: "b0l1m2n",
-    message: "feat(auctasync): production deployment and load validation for concurrent bidding",
+    message:
+      "feat(auctasync): milestone — real-time bidding, listings, payments, and live analytics shipped to production",
   },
 ];
 
+// 5 commits, in the same order as ASSETVERSE_ROWS = [2,3,4,5,6].
 export const assetverseCommitContent: CommitContent[] = [
   {
     hash: "d1e2f3g",
-    message: "feat(assetverse): scaffold role-based asset management system",
+    message:
+      "feat(assetverse): scaffold multi-tenant model — one employee account, many company affiliations",
   },
   {
     hash: "d4g5h6i",
-    message: "feat(assetverse): implement RBAC with role hierarchy and permission checks",
+    message:
+      "feat(assetverse): implement self-serve registration, approval-gated affiliation, and role-based access",
   },
   {
     hash: "d7h8i9j",
-    message: "feat(assetverse): build audit trail logging every asset state change",
+    message:
+      "feat(assetverse): implement full asset lifecycle (inventory → assignment → return) + Stripe-billed subscriptions",
+  },
+  {
+    hash: "d0k1l2m",
+    message:
+      "feat(assetverse): adopt TanStack Query for caching, request deduplication, and background revalidation across the asset dashboard",
   },
   {
     hash: "d7k8l9m",
-    message: "feat(assetverse): milestone — full audit trail across asset lifecycle shipped",
+    message:
+      "feat(assetverse): milestone — Recharts analytics + PDF-exportable reports shipped to production",
   },
 ];
 
+// 5 commits, in the same order as ASYNCLANGAI_ROWS = [19,20,21,22,23].
 export const asynclangaiCommitContent: CommitContent[] = [
   {
     hash: "l1a2n3g",
-    message: "feat(asynclangai): scaffold real-time English practice platform",
+    message: "feat(asynclangai): scaffold real-time English practice platform on Vapi voice AI",
+  },
+  {
+    hash: "l2b3o4g",
+    message:
+      "feat(asynclangai): implement Firebase Authentication (client + Admin SDK) with Zod-validated, react-hook-form-driven session setup",
   },
   {
     hash: "l4a5n6g",
-    message: "feat(asynclangai): implement real-time AI conversation engine for spoken practice",
+    message:
+      "feat(asynclangai): implement live voice conversation engine with natural back-and-forth dialogue",
   },
   {
     hash: "l7a8n9g",
-    message: "feat(asynclangai): build custom virtual interviews and instant feedback engine",
+    message:
+      "feat(asynclangai): implement custom mock interviews via Gemini, offload scoring to a Redis/Bull queue",
   },
   {
     hash: "l0a1n2g",
-    message: "feat(asynclangai): milestone — live AI conversation + feedback loop shipped",
+    message:
+      "feat(asynclangai): milestone — live voice practice with non-blocking AI feedback pipeline shipped",
   },
 ];
 
 export const careerpilotCommitContent: CommitContent[] = [
   {
     hash: "c1d2e3f",
-    message: "feat(careerpilot): scaffold career roadmap generator, define user input flow",
+    message:
+      "feat(careerpilot): scaffold AI learning platform — Next.js 16, Firebase auth, MongoDB, unified full-stack architecture",
   },
   {
     hash: "c4g5h6i",
-    message: "feat(careerpilot): integrate LLM API for personalized roadmap generation",
+    message:
+      "feat(careerpilot): implement Gemini roadmap generation with Zod-validated structured output, generalized beyond tech careers to any skill domain",
   },
   {
     hash: "c7h8i9j",
-    message: "feat(careerpilot): build voice-based mock interview pipeline",
+    message:
+      "feat(careerpilot): implement live Vapi voice mock interviews with real-time conversational flow",
+  },
+  {
+    hash: "c2q3r4s",
+    message:
+      "feat(careerpilot): implement adaptive quiz engine — Gemini-generated quizzes per roadmap phase to validate understanding before advancing",
+  },
+  {
+    hash: "c5t6u7v",
+    message:
+      "feat(careerpilot): implement AI-generated interview/assessment question bank, goal-specific across technical, academic, and practical tracks",
+  },
+
+  {
+    hash: "c8w9x0y",
+    message:
+      "feat(careerpilot): implement persistent progress tracking — roadmap completion, quiz scores, and interview history in MongoDB",
   },
   {
     hash: "c7j8k9l",
-    message: "feat(careerpilot): milestone — end-to-end roadmap + voice interview flow shipped",
+    message:
+      "feat(careerpilot): milestone — full learning loop shipped: roadmaps, quizzes, question bank, voice interviews, and progress tracking",
   },
 ];
 
 export const auctasyncBugfixCommitContent: CommitContent[] = [
   {
     hash: "ra1c2d3",
-    message:
-      "fix(auctasync): [PLACEHOLDER] reproduce and isolate race condition in concurrent bid updates",
+    message: "fix(auctasync): reproduce and isolate race condition in concurrent bid updates",
   },
   {
     hash: "ra4e5f6",
-    message:
-      "fix(auctasync): [PLACEHOLDER] resolve race condition with server-authoritative bid ordering",
+    message: "fix(auctasync): resolve race condition with server-authoritative bid ordering",
   },
 ];
 
 export const careerpilotBugfixCommitContent: CommitContent[] = [
   {
     hash: "sc1d2e3",
-    message:
-      "fix(careerpilot): [PLACEHOLDER] reproduce and isolate session-state bug in voice interview flow",
+    message: "fix(careerpilot): reproduce and isolate session-state bug in voice interview flow",
   },
   {
     hash: "sc4f5g6",
+    message: "fix(careerpilot): resolve session-state bug with corrected state management",
+  },
+];
+
+export const careerpilotDuplicateSubmitBugfixCommitContent: CommitContent[] = [
+  {
+    hash: "cd1x2y3",
     message:
-      "fix(careerpilot): [PLACEHOLDER] resolve session-state bug with corrected state management",
+      "fix(careerpilot): reproduce and isolate duplicate roadmap generation on rapid re-submit",
+  },
+  {
+    hash: "cd4z5a6",
+    message:
+      "fix(careerpilot): resolve duplicate-submit race with an idempotency guard on generation",
   },
 ];

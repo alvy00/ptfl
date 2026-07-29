@@ -7,6 +7,7 @@ import {
   careerpilotCommitContent,
   auctasyncBugfixCommitContent,
   careerpilotBugfixCommitContent,
+  careerpilotDuplicateSubmitBugfixCommitContent,
 } from "@/data/portfolio/commits";
 
 import type { BranchDef, BugfixDef, Commit, Layout, MainCommit, Tier } from "./gitGraphTypes";
@@ -100,23 +101,36 @@ function bugfixTint(projectAccent: string): string {
   return mixHex(BUGFIX_COLOR, projectAccent, 0.32);
 }
 
-export const TOTAL_LANES = 7;
-export const TOTAL_ROWS = 27;
+export const TOTAL_LANES = 8;
+export const TOTAL_ROWS = 37;
 
-// Row plan (27 rows total, 0-26), verified for full coverage with no
+// Row plan (37 rows total, 0-36), verified for full coverage with no
 // gaps/collisions before this was written:
 // 0 enroll | 1 learn(react/html/css/tailwind/node/framer/express)
-// 2-5 AssetVerse | 6 achieve(bootcamp) | 7 learn(nextjs/gsap)
-// 8-13 AuctaSync (10-11 = its bugfix) | 14 learn(ai/llm/rag)
-// 15-18 AsyncLangAI | 19 learn(vector db) | 20-25 CareerPilot
-// (23-24 = its bugfix) | 26 HEAD
-const MAIN_ROWS = [0, 1, 6, 7, 14, 19, 26];
-const ASSETVERSE_ROWS = [2, 3, 4, 5];
-const AUCTASYNC_ROWS = [8, 9, 12, 13];
-const AUCTASYNC_BUGFIX_ROWS = [10, 11];
-const ASYNCLANGAI_ROWS = [15, 16, 17, 18];
-const CAREERPILOT_ROWS = [20, 21, 22, 25];
-const CAREERPILOT_BUGFIX_ROWS = [23, 24];
+// 2-6 AssetVerse (5 commits) | 7 achieve(bootcamp) | 8 learn(nextjs/gsap)
+// 9-17 AuctaSync (9 rows: 7 commits + its 2-commit bugfix at 11-12,
+//   between commit2 and commit3 — unchanged relative position from
+//   before, just renumbered) | 18 learn(ai/llm/rag)
+// 19-23 AsyncLangAI (5 commits) | 24 learn(vector db)
+// 25-35 CareerPilot (11 rows: 7 commits + duplicate-submit bugfix at
+//   27-28 + session-state bugfix at 30-31, same relative shape as the
+//   previous timeline-order fix, shifted +5) | 36 HEAD
+//
+// This revision adds 3 more AuctaSync commits (drag-and-drop listing
+// management + bid history, UI polish, decoupled-architecture hardening),
+// 1 more AssetVerse commit (TanStack Query adoption), and 1 more
+// AsyncLangAI commit (Firebase Auth + Zod/react-hook-form) — all pulled
+// from README/feature-list items that weren't represented in the graph
+// yet. Every row from AssetVerse onward shifts +1 through +5 as a result;
+// this is a full renumbering, not a patch on top of the old one.
+const MAIN_ROWS = [0, 1, 7, 8, 18, 24, 36];
+const ASSETVERSE_ROWS = [2, 3, 4, 5, 6];
+const AUCTASYNC_ROWS = [9, 10, 13, 14, 15, 16, 17];
+const AUCTASYNC_BUGFIX_ROWS = [11, 12];
+const ASYNCLANGAI_ROWS = [19, 20, 21, 22, 23];
+const CAREERPILOT_ROWS = [25, 26, 29, 32, 33, 34, 35];
+const CAREERPILOT_BUGFIX_ROWS = [30, 31]; // session-state — after voice interviews (row 29)
+const CAREERPILOT_DUPLICATE_SUBMIT_BUGFIX_ROWS = [27, 28]; // duplicate-submit — after roadmap gen (row 26)
 
 const withRows = (content: Commit[], rows: number[]): (Commit & { row: number })[] =>
   content.map((c, i) => ({ ...c, row: rows[i] }));
@@ -131,7 +145,7 @@ export const BRANCH_DEFS: BranchDef[] = [
     color: PALETTE.projects.assetverse.accent,
     lane: 1,
     sourceRow: 1,
-    mergeRow: 6,
+    mergeRow: 7,
     delay: 1.0,
     commits: withRows(assetverseCommitContent, ASSETVERSE_ROWS),
   },
@@ -140,8 +154,8 @@ export const BRANCH_DEFS: BranchDef[] = [
     projectKey: "auctasync",
     color: PALETTE.projects.auctasync.accent,
     lane: 2,
-    sourceRow: 7,
-    mergeRow: 14,
+    sourceRow: 8,
+    mergeRow: 18,
     delay: 1.5,
     commits: withRows(auctasyncCommitContent, AUCTASYNC_ROWS),
   },
@@ -150,8 +164,8 @@ export const BRANCH_DEFS: BranchDef[] = [
     projectKey: "asynclangai",
     color: PALETTE.projects.asynclangai.accent,
     lane: 4,
-    sourceRow: 14,
-    mergeRow: 19,
+    sourceRow: 18,
+    mergeRow: 24,
     delay: 1.75,
     commits: withRows(asynclangaiCommitContent, ASYNCLANGAI_ROWS),
   },
@@ -160,31 +174,52 @@ export const BRANCH_DEFS: BranchDef[] = [
     projectKey: "careerpilot",
     color: PALETTE.projects.careerpilot.accent,
     lane: 5,
-    sourceRow: 19,
-    mergeRow: 26,
+    sourceRow: 24,
+    mergeRow: 36,
     delay: 2.0,
     commits: withRows(careerpilotCommitContent, CAREERPILOT_ROWS),
   },
 ];
 
+// Order here also drives BRANCH_STAGGER's per-branch reveal delay in
+// buildGeometry (via each entry's array index) — duplicate-submit stays
+// listed before session-state, matching the row-plan order above.
 export const BUGFIX_DEFS: BugfixDef[] = [
   {
     name: "bugfix/auctasync-race-condition",
     bugfixKey: "auctasync-race-condition",
     parentLane: 2,
     lane: 3,
-    sourceRow: 9,
-    mergeRow: 12,
+    // Brackets commit2 (WebSocket bid broadcasting, row 10) and commit3
+    // (the new listing-management commit, row 13) — same relative
+    // position as before, just renumbered.
+    sourceRow: 10,
+    mergeRow: 13,
     delay: 1.4,
     commits: withRows(auctasyncBugfixCommitContent, AUCTASYNC_BUGFIX_ROWS),
+  },
+  {
+    name: "bugfix/careerpilot-duplicate-submit",
+    bugfixKey: "careerpilot-duplicate-submit",
+    parentLane: 5,
+    lane: 7,
+    // Brackets roadmap-gen (row 26) and voice-interviews (row 29).
+    sourceRow: 26,
+    mergeRow: 29,
+    delay: 2.2,
+    commits: withRows(
+      careerpilotDuplicateSubmitBugfixCommitContent,
+      CAREERPILOT_DUPLICATE_SUBMIT_BUGFIX_ROWS,
+    ),
   },
   {
     name: "bugfix/careerpilot-session-state",
     bugfixKey: "careerpilot-session-state",
     parentLane: 5,
     lane: 6,
-    sourceRow: 22,
-    mergeRow: 25,
+    // Brackets voice-interviews (row 29) and quiz-engine (row 32).
+    sourceRow: 29,
+    mergeRow: 32,
     delay: 2.4,
     commits: withRows(careerpilotBugfixCommitContent, CAREERPILOT_BUGFIX_ROWS),
   },
