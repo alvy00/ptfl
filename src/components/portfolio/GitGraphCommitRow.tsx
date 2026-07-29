@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useTransform, useMotionValueEvent, type MotionValue } from "framer-motion";
 import type { MouseEvent } from "react";
 
 import { PALETTE } from "@/lib/portfolio/gitGraphData";
@@ -18,6 +18,7 @@ export function GitGraphCommitRow({
   onOpen,
   onEnter,
   onLeave,
+  progress,
 }: {
   n: NodeMeta;
   isHovered: boolean;
@@ -27,6 +28,10 @@ export function GitGraphCommitRow({
   onOpen: (n: NodeMeta, evt?: MouseEvent) => void;
   onEnter: () => void;
   onLeave: () => void;
+  /** Same scroll-progress motion value the SVG branch paths and
+   *  GitGraphNode use — keeps this row's reveal reversible on scroll-up,
+   *  in sync with the graph line/dot instead of a one-shot whileInView. */
+  progress: MotionValue<number>;
 }) {
   const isMilestone = n.message.toLowerCase().includes("milestone");
   const commitAriaLabel =
@@ -34,17 +39,29 @@ export function GitGraphCommitRow({
       ? `Commit selection: ${n.hash} ${n.message}`
       : `Commit on ${n.branchGroup}${n.isBugfix ? ", bugfix" : ""}: ${n.hash} ${n.message}`;
 
-  const nodeIdleTransition = (delay: number) =>
-    reduceMotion ? { duration: 0.01 } : { duration: 0.5, ease: "easeOut" as const, delay };
-
-  // amount was 0.6 — a row needed to be 60% on-screen before it would even
-  // start animating, which meant a whole 4-commit block (only ~300-350px
-  // tall) often crossed that threshold for every row within the same
-  // scroll tick, so the stagger delay was the only thing distinguishing
-  // them and it was too small to read. 0.15 lets each row kick off as
-  // soon as it's just entering the viewport, so the cascade actually
-  // plays out across the scroll instead of firing as one clump after it.
-  const viewportTrigger = { once: true, amount: 0.15 } as const;
+  // Reversible reveal, scrubbed off the same scroll-progress value that
+  // drives the branch line's pathLength and the SVG node's opacity/scale
+  // (see GitGraphNode) — replaces the old whileInView(once:true), which
+  // could only ever fire hidden -> shown one time. With that version,
+  // scrolling back up past a branch retracted its line but left this row
+  // fully opaque and already in its resting position, now describing a
+  // commit whose connecting line no longer existed. These three transforms
+  // (opacity, and a small x/y settle) all reverse in lockstep with the
+  // line/dot instead.
+  const rowOpacity = useTransform(progress, n.revealWindow, [0, 1]);
+  const rowX = useTransform(progress, n.revealWindow, [-8, 0]);
+  const rowY = useTransform(progress, n.revealWindow, [10, 0]);
+  const labelOpacity = useTransform(progress, n.revealWindow, [0, 0.45]);
+  const milestoneBgOpacity = useTransform(progress, n.revealWindow, [0, 0.04]);
+  // The <li>'s pointer-events were unconditionally "auto" regardless of
+  // reveal state — rowOpacity only ever gated the *button's* visual
+  // opacity, so a scrolled-past/not-yet-revealed row (invisible) still
+  // sat there fully hoverable/clickable. Hovering that empty space fired
+  // onEnter -> focusBranch, which lit up the active border around a box
+  // whose line/nodes weren't actually drawn. Gating pointer-events on the
+  // same rowOpacity value closes that gap: below the threshold the row is
+  // inert, matching what's actually visible.
+  const rowPointerEvents = useTransform(rowOpacity, (v) => (v > 0.05 ? "auto" : "none"));
 
   // --- terminal-stream decrypt reveal -------------------------------------
   // Deliberately NOT applied to every row. At 26 rows, a mandatory
@@ -58,6 +75,9 @@ export function GitGraphCommitRow({
   const shouldDecrypt = n.isHead || isMilestone || isFirstOfBranch;
 
   const [inView, setInView] = useState(false);
+  useMotionValueEvent(rowOpacity, "change", (v) => {
+    if (v >= 1 && !inView) setInView(true);
+  });
   const pointerCoarse = usePointerCoarse();
   // Touch scroll can enter several rows in the same second; coarser,
   // fewer-frame ticks keep that from adding busy work mid-scroll. Desktop
@@ -82,22 +102,20 @@ export function GitGraphCommitRow({
   // -------------------------------------------------------------------------
 
   return (
-    <li
-      className="absolute inset-x-0 flex flex-col pointer-events-auto"
+    <motion.li
+      className="absolute inset-x-0 flex flex-col"
       style={{
         top: n.y,
         transform: "translateY(-50%)",
         opacity: dimmed ? 0.35 : 1,
         transition: reduceMotion ? undefined : "opacity 250ms ease-out",
+        pointerEvents: reduceMotion ? "auto" : rowPointerEvents,
       }}
     >
       {/* branch context label */}
       {n.branchName && (
         <motion.div
-          initial={{ opacity: 0, y: 4 }}
-          whileInView={{ opacity: 0.45, y: 0 }}
-          viewport={viewportTrigger}
-          transition={nodeIdleTransition(n.revealDelay)}
+          style={{ opacity: reduceMotion ? 0.45 : labelOpacity, y: reduceMotion ? 0 : rowY }}
           className="text-[10px] sm:text-[11px] font-mono tracking-tight text-gray-400 select-none pb-0.5 pointer-events-none flex items-center gap-1"
         >
           <span className="text-gray-600 font-bold font-sans">$</span>
@@ -115,13 +133,10 @@ export function GitGraphCommitRow({
         onBlur={onLeave}
         title={n.message}
         aria-label={commitAriaLabel}
-        initial={{ opacity: 0, x: -8, y: 10 }}
-        whileInView={{ opacity: 1, x: 0, y: 0 }}
-        onViewportEnter={() => setInView(true)}
-        viewport={viewportTrigger}
-        transition={nodeIdleTransition(n.revealDelay + 0.05)}
-        className="flex items-start gap-2 sm:gap-3 rounded-md px-1.5 py-1 sm:py-0.5 text-left transition-all duration-200 w-full relative group min-w-0 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
         style={{
+          opacity: reduceMotion ? 1 : rowOpacity,
+          x: reduceMotion ? 0 : rowX,
+          y: reduceMotion ? 0 : rowY,
           background: isHighlighted
             ? `${n.color}22`
             : isHovered
@@ -129,20 +144,16 @@ export function GitGraphCommitRow({
               : "transparent",
           boxShadow: isHighlighted ? `0 0 0 1px ${n.color}55` : "none",
         }}
+        className="flex items-start gap-2 sm:gap-3 rounded-md px-1.5 py-1 sm:py-0.5 text-left transition-all duration-200 w-full relative group min-w-0 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
       >
         {/* milestone row emphasis */}
         {isMilestone && (
           <motion.div
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 0.04 }}
-            viewport={viewportTrigger}
-            transition={
-              reduceMotion
-                ? { duration: 0.01 }
-                : { duration: 0.5, ease: "easeOut", delay: n.revealDelay }
-            }
+            style={{
+              opacity: reduceMotion ? 0.04 : milestoneBgOpacity,
+              backgroundColor: n.color === PALETTE.mainLine ? "#9ca3af" : n.color,
+            }}
             className="absolute inset-y-0 -left-3 right-0 rounded-l-md pointer-events-none -z-[5]"
-            style={{ backgroundColor: n.color === PALETTE.mainLine ? "#9ca3af" : n.color }}
           />
         )}
 
@@ -176,6 +187,6 @@ export function GitGraphCommitRow({
           {n.message}
         </span>
       </motion.button>
-    </li>
+    </motion.li>
   );
 }

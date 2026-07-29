@@ -449,6 +449,7 @@ export function GitGraph() {
               dimmed={isDimmed(n.branchGroup)}
               nodeScale={nodeScale}
               reduceMotion={reduceMotion}
+              progress={smoothProgress}
             />
           ))}
         </svg>
@@ -550,6 +551,7 @@ export function GitGraph() {
               isHighlighted={highlighted === n.hash}
               dimmed={isDimmed(n.branchGroup)}
               reduceMotion={reduceMotion}
+              progress={smoothProgress}
               onOpen={openCommit}
               onEnter={() => {
                 setHovered(n.hash);

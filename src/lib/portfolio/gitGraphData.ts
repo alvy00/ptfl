@@ -42,7 +42,16 @@ export const PALETTE = {
   bg: "#0e0f13",
   mainLine: "#ffffff",
   mainText: "#e2e4e9",
-  head: "#34d399",
+  // Was #34d399 — the EXACT same hex as careerpilot's accent below. HEAD
+  // and CareerPilot sit right next to each other at the bottom of the
+  // graph (CareerPilot is the last project before HEAD), so "this is
+  // CareerPilot" and "this is where you are right now" were two different
+  // concepts glowing in literally the same color with zero hue difference
+  // to tell them apart. Shifted a few degrees toward cyan (teal, hue ~172)
+  // vs. CareerPilot's more mint/emerald lean (hue ~152) — close enough to
+  // still read as "part of the same green family" but distinct enough to
+  // disambiguate at a glance.
+  head: "#2dd4bf",
   bugfix: BUGFIX_COLOR,
   projects: {
     assetverse: { accent: "#a78bfa", text: "#a28ded" },

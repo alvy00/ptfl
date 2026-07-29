@@ -61,6 +61,12 @@ export type NodeMeta = {
   bugfixKey?: BugfixKey;
   bugfixCommitIndex?: number;
   branchName?: string;
+  /** [start, end] fractions of overall scroll progress (matching the same
+   *  0..1 domain `drawRange`/branch `pathLength` use) across which this
+   *  node's reveal (opacity + scale) is scrubbed. Replaces a one-shot
+   *  whileInView trigger so the node can un-reveal on scroll-up in sync
+   *  with its connecting branch line retracting — see GitGraphNode. */
+  revealWindow: [number, number];
   /** Which branch this node belongs to, for hover-focus dimming of siblings.
    *  "main" for trunk commits, the branch name (e.g. "feat/auctasync") for
    *  everything else — a bugfix node's group is its *parent* feature branch,
