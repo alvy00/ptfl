@@ -102,7 +102,7 @@ export function GlobalSearch() {
   );
 
   return (
-    <div className="mb-8 sm:mb-12 w-full max-w-4xl mx-auto px-4 sm:px-0">
+    <div className="pt-3 sm:pt-4 mb-8 sm:mb-12 w-full max-w-4xl mx-auto px-4 sm:px-0">
       <style dangerouslySetInnerHTML={{ __html: dynamicStyles }} />
 
       <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500 font-mono">

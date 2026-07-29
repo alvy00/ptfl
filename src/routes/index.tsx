@@ -55,8 +55,16 @@ export function Index() {
   // bar that's permanently pinned taking up space, or one that fully
   // vanishes and has to be scrolled back to.
   const reduceMotion = useReducedMotion() ?? false;
-  const searchSentinelRef = useRef<HTMLDivElement>(null);
-  const searchContentRef = useRef<HTMLDivElement>(null);
+  // State (not plain useRef) specifically so it can be a *dependency* for
+  // the effects below — a callback ref fires exactly when React attaches
+  // the DOM node, whenever that actually happens, rather than us having
+  // to guess which upstream timing signal (isLoading, an animation
+  // duration, etc.) coincides with it. This mount is gated behind
+  // AnimatePresence's loader exit animation, one layer beyond isLoading
+  // itself, which is exactly the kind of shifting timing this sidesteps
+  // for good instead of chasing it dependency by dependency.
+  const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
+  const [searchContentEl, setSearchContentEl] = useState<HTMLDivElement | null>(null);
   const [isSearchStuck, setIsSearchStuck] = useState(false);
   const isSearchStuckRef = useRef(false);
   const searchBarHeightRef = useRef(0);
@@ -80,17 +88,18 @@ export function Index() {
   // engaged, since sticky offers no native "I'm stuck now" event. Robust
   // to layout shifts above it (unlike computing a fixed pixel threshold
   // from scrollY once and hoping nothing above ever changes height).
-  // Depends on isLoading, not []: the sentinel/search-bar DOM only exists
-  // once the loading screen (isLoading) has cleared — until then this ref
-  // is null. With an empty dep array this effect only ever ran once, at
-  // the very first mount, while still loading — it hit `if (!el) return`
-  // and quit for good, and since [] never re-fires, the observer was
-  // never actually attached for the rest of the session. Depending on
-  // isLoading gives it a second, correctly-timed attempt right after the
-  // real content mounts.
+  // Depends on sentinelEl (state set via a callback ref), not [] or
+  // isLoading. The sentinel only exists once AnimatePresence has actually
+  // finished swapping the loader out for the real content — which lands
+  // a beat after isLoading itself flips (mode="wait" keeps the loader
+  // mounted through its own ~0.6s exit animation first). An empty dep
+  // array fired once, immediately, while the ref was still null, and
+  // never got a second chance. Depending on isLoading fired too, just
+  // earlier than the DOM node actually existed. The callback ref sidesteps
+  // guessing the right timing signal altogether — this fires exactly when
+  // React attaches the node, whenever that turns out to be.
   useEffect(() => {
-    const el = searchSentinelRef.current;
-    if (!el) return;
+    if (!sentinelEl) return;
     const io = new IntersectionObserver(
       ([entry]) => {
         const stuck = !entry.isIntersecting;
@@ -104,10 +113,10 @@ export function Index() {
       },
       { threshold: 0 },
     );
-    io.observe(el);
+    io.observe(sentinelEl);
     return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading]);
+  }, [sentinelEl]);
 
   // Measures the bar's own rendered height (GlobalSearch's box, margin
   // collapsed out of this wrapper — see the comment on the sticky
@@ -121,23 +130,23 @@ export function Index() {
   // height synchronously on mount (before paint) closes that gap; the
   // ResizeObserver below still keeps it accurate afterward (font load,
   // resize, breakpoint change, etc).
-  // Same isLoading-dependency fix as the IntersectionObserver above —
-  // searchContentRef is null until the loading screen clears, so an
-  // empty dep array here would permanently no-op too.
+  // Depends on searchContentEl (state set via callback ref), not a fixed
+  // timing signal like isLoading — see the note on sentinelEl/
+  // searchContentEl above. Fires exactly when the DOM node attaches,
+  // whatever the mount timing turns out to be.
   useLayoutEffect(() => {
-    const el = searchContentRef.current;
-    if (el) searchBarHeightRef.current = el.getBoundingClientRect().height;
-  }, [isLoading]);
+    if (searchContentEl)
+      searchBarHeightRef.current = searchContentEl.getBoundingClientRect().height;
+  }, [searchContentEl]);
 
   useEffect(() => {
-    const el = searchContentRef.current;
-    if (!el) return;
+    if (!searchContentEl) return;
     const ro = new ResizeObserver(([entry]) => {
       searchBarHeightRef.current = entry.contentRect.height;
     });
-    ro.observe(el);
+    ro.observe(searchContentEl);
     return () => ro.disconnect();
-  }, [isLoading]);
+  }, [searchContentEl]);
 
   const lastScrollYRef = useRef(0);
   // Minimum scroll movement before reacting at all — without this,
@@ -243,7 +252,7 @@ export function Index() {
                   IntersectionObserver effect above. Placed immediately
                   before the sticky bar so it scrolls out of view at
                   exactly the moment the bar itself engages `sticky`. */}
-              <div ref={searchSentinelRef} aria-hidden="true" className="h-px" />
+              <div ref={setSentinelEl} aria-hidden="true" className="h-px" />
 
               {/* Search bar — sticky, so it stays reachable while scrolling
                   the (fairly long, 27-row) commit graph below instead of
@@ -281,7 +290,7 @@ export function Index() {
                 className="sticky top-0 z-30"
               >
                 <motion.div
-                  ref={searchContentRef}
+                  ref={setSearchContentEl}
                   style={{ y: searchHideYDisplay }}
                   className="bg-[#0e0f13]/95 backdrop-blur-md"
                   animate={{
