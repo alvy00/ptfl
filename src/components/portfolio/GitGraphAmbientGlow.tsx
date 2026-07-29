@@ -1,5 +1,8 @@
 import { motion } from "framer-motion";
 import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
+
+import { PALETTE } from "@/lib/portfolio/gitGraphData";
 
 // --- redesign rationale -----------------------------------------------
 // Previous version ran four saturated hues (purple/amber/cyan/green) at
@@ -32,9 +35,42 @@ import { createPortal } from "react-dom";
 //  - reduceMotion freezes all spatial animation; the color crossfade
 //    still runs (it's not spatial motion) but drops to a near-instant
 //    transition so it reads as a state change, not an animation.
+//
+// --- coarse-pointer idle cycle -----------------------------------------
+// GitGraphParticleField (the canvas-based dot field + connector + comet)
+// mounts nothing at all on coarse-pointer devices — reasonable for perf,
+// canvas rAF drawing is real work every frame — but the side effect was
+// that mobile got literally none of that "this graph is alive" texture
+// the desktop particle field provides, since this component's own
+// saturated note sits fully transparent until something sets
+// `activeColor`, and on touch there's no hover, only scroll-triggered
+// auto-focus. So on `isCoarsePointer` specifically, the note now idles
+// through a slow, dim color cycle through the four project accents on a
+// `setInterval` — not a rAF loop, not canvas, just an occasional React
+// state flip that Framer Motion cross-fades exactly the way it already
+// crossfades to `activeColor`. The moment a real `activeColor` shows up
+// (the visitor scrolled a branch into focus), it takes over at full
+// intensity and the idle cycle is simply superseded, not fought with.
+// Respects reduceMotion the same way everything else here does: the
+// interval never starts, and the note sits at a low static neutral
+// opacity instead of fully off, so reduced-motion mobile still isn't a
+// flat void — it just isn't animated.
 // -------------------------------------------------------------------------
 
 const NEUTRAL = "#3f4656"; // desaturated slate-blue — baseline wash, tied to no branch
+
+// Same four accents BRANCH_DEFS/PALETTE already use for the graph's own
+// branches — the idle cycle isn't a new color source, just a slow
+// rotation through colors that already mean something elsewhere in this
+// UI, so a mobile visitor isn't shown hues that don't appear anywhere
+// else once they do reach a branch.
+const IDLE_CYCLE_COLORS = [
+  PALETTE.projects.assetverse.accent,
+  PALETTE.projects.auctasync.accent,
+  PALETTE.projects.asynclangai.accent,
+  PALETTE.projects.careerpilot.accent,
+];
+const IDLE_CYCLE_INTERVAL_MS = 9000;
 
 type NeutralBlob = {
   size: number;
@@ -72,10 +108,27 @@ const NEUTRAL_BLOBS: NeutralBlob[] = [
 export function GitGraphAmbientGlow({
   activeColor,
   reduceMotion,
+  isCoarsePointer,
 }: {
   activeColor: string | null;
   reduceMotion: boolean;
+  /** Gates the idle color cycle below — desktop already gets ambient
+   *  texture from GitGraphParticleField's canvas dots, so the cycle would
+   *  just be a second, redundant source of "life" there. Mobile has no
+   *  canvas at all, so this is its substitute. */
+  isCoarsePointer: boolean;
 }) {
+  const [idleIdx, setIdleIdx] = useState(0);
+
+  useEffect(() => {
+    if (!isCoarsePointer || reduceMotion) return;
+    const id = window.setInterval(
+      () => setIdleIdx((i) => (i + 1) % IDLE_CYCLE_COLORS.length),
+      IDLE_CYCLE_INTERVAL_MS,
+    );
+    return () => window.clearInterval(id);
+  }, [isCoarsePointer, reduceMotion]);
+
   // Portaled into the #page-content div in index.tsx — NOT document.body,
   // and NOT <main>. This component is mounted inside index.tsx's
   // `whileInView` motion.div around the GlobalSearch/GitGraph section;
@@ -123,7 +176,12 @@ export function GitGraphAmbientGlow({
       {/* The one saturated note. Crossfades to whichever branch is
           focused (hover or scroll-position — see GitGraph's
           `focusedBranch`); sits fully transparent when nothing is
-          focused, rather than idling on a default color. */}
+          focused on non-coarse pointers. On coarse pointers (no hover,
+          no particle-field canvas at all) it never idles fully off —
+          `activeColor` still wins the instant it's set, but between
+          focuses it slow-cycles through the project accents instead of
+          sitting blank, so mobile has *some* baseline "alive" texture
+          the desktop particle canvas otherwise provides. */}
       <motion.div
         className="absolute rounded-full"
         style={{
@@ -135,10 +193,13 @@ export function GitGraphAmbientGlow({
           willChange: "opacity, background",
         }}
         animate={{
-          background: activeColor ?? NEUTRAL,
-          opacity: activeColor ? 0.035 : 0,
+          background: activeColor ?? (isCoarsePointer ? IDLE_CYCLE_COLORS[idleIdx] : NEUTRAL),
+          opacity: activeColor ? 0.035 : isCoarsePointer ? (reduceMotion ? 0.015 : 0.022) : 0,
         }}
-        transition={{ duration: reduceMotion ? 0.01 : 1.1, ease: "easeInOut" }}
+        transition={{
+          duration: reduceMotion ? 0.01 : activeColor ? 1.1 : 2.5,
+          ease: "easeInOut",
+        }}
       />
     </div>,
     target,

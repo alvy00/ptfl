@@ -335,7 +335,11 @@ export function GitGraph() {
     <>
       <GitGraphScrollProgress progress={spineProgress} />
 
-      <GitGraphAmbientGlow activeColor={focusedColor} reduceMotion={reduceMotion} />
+      <GitGraphAmbientGlow
+        activeColor={focusedColor}
+        reduceMotion={reduceMotion}
+        isCoarsePointer={isCoarsePointer}
+      />
 
       <GitGraphLegend />
 

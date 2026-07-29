@@ -34,8 +34,29 @@ export function GitGraphCommitRow({
   progress: MotionValue<number>;
 }) {
   const isMilestone = n.message.toLowerCase().includes("milestone");
-  const commitAriaLabel =
-    n.branchGroup === "main"
+  // HEAD is the terminus of the whole graph — the peak-end moment, where a
+  // visitor who's scrolled the entire commit history lands right as the
+  // "open to work" copy appears. Treating it like every other trunk commit
+  // (a click opens a read-only detail modal) wastes that moment: there's
+  // nothing to inspect, the copy itself IS the ask. So HEAD renders as a
+  // real mailto link instead of a modal trigger — one fewer click between
+  // "I'm interested" and an email actually being drafted.
+  const isHeadContact = n.isHead;
+  const HEAD_EMAIL = "alvyahmed03@gmail.com";
+  const HEAD_SUBJECT = "Internship / junior developer role — via portfolio";
+  const HEAD_BODY = [
+    "Hi Alvy,",
+    "",
+    "I came across your portfolio and wanted to reach out about an internship / junior developer opportunity.",
+    "",
+    "",
+  ].join("\n");
+  const HEAD_MAILTO = `mailto:${HEAD_EMAIL}?subject=${encodeURIComponent(
+    HEAD_SUBJECT,
+  )}&body=${encodeURIComponent(HEAD_BODY)}`;
+  const commitAriaLabel = isHeadContact
+    ? `Email Alvy at ${HEAD_EMAIL} — ${n.message}`
+    : n.branchGroup === "main"
       ? `Commit selection: ${n.hash} ${n.message}`
       : `Commit on ${n.branchGroup}${n.isBugfix ? ", bugfix" : ""}: ${n.hash} ${n.message}`;
 
@@ -123,17 +144,8 @@ export function GitGraphCommitRow({
         </motion.div>
       )}
 
-      <motion.button
-        id={`commit-${n.hash}`}
-        type="button"
-        onClick={(e) => onOpen(n, e)}
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        onFocus={onEnter}
-        onBlur={onLeave}
-        title={n.message}
-        aria-label={commitAriaLabel}
-        style={{
+      {(() => {
+        const sharedStyle = {
           opacity: reduceMotion ? 1 : rowOpacity,
           x: reduceMotion ? 0 : rowX,
           y: reduceMotion ? 0 : rowY,
@@ -143,50 +155,96 @@ export function GitGraphCommitRow({
               ? "rgba(255,255,255,0.04)"
               : "transparent",
           boxShadow: isHighlighted ? `0 0 0 1px ${n.color}55` : "none",
-        }}
-        className="flex items-start gap-2 sm:gap-3 rounded-md px-1.5 py-1 sm:py-0.5 text-left transition-all duration-200 w-full relative group min-w-0 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
-      >
-        {/* milestone row emphasis */}
-        {isMilestone && (
-          <motion.div
-            style={{
-              opacity: reduceMotion ? 0.04 : milestoneBgOpacity,
-              backgroundColor: n.color === PALETTE.mainLine ? "#9ca3af" : n.color,
-            }}
-            className="absolute inset-y-0 -left-3 right-0 rounded-l-md pointer-events-none -z-[5]"
-          />
-        )}
+        };
+        const sharedClassName =
+          "flex items-start gap-2 sm:gap-3 rounded-md px-1.5 py-1 sm:py-0.5 text-left transition-all duration-200 w-full relative group min-w-0 touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40";
 
-        <div className="flex items-center gap-1.5 shrink-0 tabular-nums pt-[2px]">
-          <CommitIcon
-            message={n.message}
-            color={n.isHead ? PALETTE.head : n.isMain ? "#9ca3af" : n.textColor}
-          />
-          {/* children are always the real hash — SSR-correct and hydration-
-              safe. The decrypt hook (when shouldDecrypt is true) mutates
-              this node's textContent directly on top of that, never
-              replaces it. */}
-          <span
-            ref={shouldDecrypt ? hashRef : undefined}
-            className="font-mono text-[11px] sm:text-[13px]"
-            style={{ color: n.isHead ? PALETTE.head : "#6b7280" }}
+        const content = (
+          <>
+            {/* milestone row emphasis */}
+            {isMilestone && (
+              <motion.div
+                style={{
+                  opacity: reduceMotion ? 0.04 : milestoneBgOpacity,
+                  backgroundColor: n.color === PALETTE.mainLine ? "#9ca3af" : n.color,
+                }}
+                className="absolute inset-y-0 -left-3 right-0 rounded-l-md pointer-events-none -z-[5]"
+              />
+            )}
+
+            <div className="flex items-center gap-1.5 shrink-0 tabular-nums pt-[2px]">
+              <CommitIcon
+                message={n.message}
+                color={n.isHead ? PALETTE.head : n.isMain ? "#9ca3af" : n.textColor}
+              />
+              {/* children are always the real hash — SSR-correct and hydration-
+                  safe. The decrypt hook (when shouldDecrypt is true) mutates
+                  this node's textContent directly on top of that, never
+                  replaces it. */}
+              <span
+                ref={shouldDecrypt ? hashRef : undefined}
+                className="font-mono text-[11px] sm:text-[13px]"
+                style={{ color: n.isHead ? PALETTE.head : "#6b7280" }}
+              >
+                {n.hash}
+              </span>
+            </div>
+            <span
+              className="leading-snug break-words text-[13px] sm:text-[14.5px] line-clamp-2 sm:line-clamp-none flex-1 min-w-0"
+              style={{
+                color: n.textColor,
+                fontWeight: n.isMain || n.isHead || isMilestone ? 500 : 400,
+                fontStyle: n.isBugfix ? "italic" : "normal",
+                opacity: n.isHead ? 0.9 : n.isMain ? 0.9 : 0.85,
+                textShadow: isHovered ? `0 0 12px ${n.color}66` : "none",
+                // HEAD's copy is the actual call-to-action, not a label —
+                // an underline on hover is the one extra cue that turns
+                // "text that happens to be clickable" into "this is a
+                // link," matching the affordance a mailto link should
+                // carry instead of reading identically to every other
+                // (non-interactive-looking) commit message in the graph.
+                textDecoration: isHeadContact && isHovered ? "underline" : "none",
+                textUnderlineOffset: "3px",
+              }}
+            >
+              {n.message}
+            </span>
+          </>
+        );
+
+        return isHeadContact ? (
+          <motion.a
+            id={`commit-${n.hash}`}
+            href={HEAD_MAILTO}
+            onMouseEnter={onEnter}
+            onMouseLeave={onLeave}
+            onFocus={onEnter}
+            onBlur={onLeave}
+            title={`Email ${HEAD_EMAIL}`}
+            aria-label={commitAriaLabel}
+            style={sharedStyle}
+            className={sharedClassName}
           >
-            {n.hash}
-          </span>
-        </div>
-        <span
-          className="leading-snug break-words text-[13px] sm:text-[14.5px] line-clamp-2 sm:line-clamp-none flex-1 min-w-0"
-          style={{
-            color: n.textColor,
-            fontWeight: n.isMain || n.isHead || isMilestone ? 500 : 400,
-            fontStyle: n.isBugfix ? "italic" : "normal",
-            opacity: n.isHead ? 0.9 : n.isMain ? 0.9 : 0.85,
-            textShadow: isHovered ? `0 0 12px ${n.color}66` : "none",
-          }}
-        >
-          {n.message}
-        </span>
-      </motion.button>
+            {content}
+          </motion.a>
+        ) : (
+          <motion.button
+            id={`commit-${n.hash}`}
+            type="button"
+            onClick={(e) => onOpen(n, e)}
+            onMouseEnter={onEnter}
+            onMouseLeave={onLeave}
+            onFocus={onEnter}
+            onBlur={onLeave}
+            title={n.message}
+            aria-label={commitAriaLabel}
+            style={sharedStyle}
+            className={sharedClassName}
+          >
+            {content}
+          </motion.button>
+        );
+      })()}
     </motion.li>
   );
 }
