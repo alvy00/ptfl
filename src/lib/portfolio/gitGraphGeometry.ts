@@ -12,6 +12,18 @@ import {
 } from "./gitGraphData";
 import type { Layout, NodeMeta } from "./gitGraphTypes";
 
+// FEATURE_X as its own named export, so components outside buildGeometry()
+// (namely GitGraphParticleField, for the particle's launch x) can match the
+// exact x every feature-branch commit node actually renders at, instead of
+// re-deriving it from `branch.lane` — which is only a slot index for
+// color/identity lookups (see the comment above FEATURE_X's definition
+// inside buildGeometry), not a physical offset. Kept as a function of
+// Layout rather than a precomputed constant since it still depends on the
+// active tier's mainX/laneW.
+export function featureTrackX(layout: Layout): number {
+  return layout.mainX + 2.25 * layout.laneW;
+}
+
 /** All pixel geometry derived from a Layout — rebuilt only when the tier changes. */
 export function buildGeometry(layout: Layout) {
   const { rowH, topPad, mainX, laneW } = layout;
@@ -32,7 +44,7 @@ export function buildGeometry(layout: Layout) {
   // and CareerPilot (lane 5) sat progressively farther out. Decoupling
   // "which lane" from "how far" fixes that: FEATURE_X/BUGFIX_X below are
   // the only two rail distances that ever get drawn.
-  const FEATURE_X = laneX(2.25);
+  const FEATURE_X = featureTrackX(layout);
   const BUGFIX_X = laneX(3.25);
 
   const branches = BRANCH_DEFS.map((b) => ({
@@ -178,3 +190,92 @@ export function drawRange(sourceRow: number, mergeRow: number, pad = 0.02): [num
   const end = mergeRow / (TOTAL_ROWS - 1);
   return [Math.max(0, start - pad), end];
 }
+
+// ---------------------------------------------------------------------------
+// Active-project box geometry: SINGLE SOURCE OF TRUTH for the box that
+// GitGraphActiveBorder draws around and that GitGraphParticleField's
+// connector line/particle targets. Previously these were computed
+// independently in GitGraph.tsx (the actual border box) and
+// GitGraphParticleField.tsx's `focusedBoxCenter()` (an approximation, off
+// by a fudge factor and using a stale conditional clearance for
+// CareerPilot that the real border box never applied) — meaning the
+// particle's "impact point" and the border's actual left edge could
+// silently drift apart. Both now read from here.
+// ---------------------------------------------------------------------------
+
+export const ACTIVE_BOX = {
+  /** How far the box extends past the text column on each side. */
+  horizontalExpand: 20,
+  /** Gap between the graph SVG and the text column — mirrors the
+   *  `calc(${graphW}px + 1.5rem)` left-offset GitGraph.tsx applies to both
+   *  the border layer and the text column. */
+  textColumnGap: 24,
+  feature: { topClearance: 4, bottomClearance: 0 },
+  bugfix: { topClearance: 4, bottomClearance: 12 },
+} as const;
+
+/** The box's left edge, in the same coordinate space GitGraphParticleField's
+ *  canvas already draws in (container-relative px). This is also exactly
+ *  where GitGraphActiveBorder's wrapper div's left edge lands, since both
+ *  derive from the same two constants — so a particle aimed here always
+ *  lands exactly on the border's real left edge, at any tier/viewport. */
+export function activeBoxLeftX(graphW: number): number {
+  return graphW + ACTIVE_BOX.textColumnGap - ACTIVE_BOX.horizontalExpand;
+}
+
+/** Top/bottom of the box for a given branch's sourceY/mergeY — matches the
+ *  clearances GitGraph.tsx applies when sizing the actual border wrapper. */
+export function activeBoxVerticalRange(
+  sourceY: number,
+  mergeY: number,
+  kind: "feature" | "bugfix",
+): { top: number; bottom: number } {
+  const { topClearance, bottomClearance } = ACTIVE_BOX[kind];
+  return { top: sourceY - topClearance, bottom: mergeY + bottomClearance };
+}
+
+/** The real shape of a resolved feature branch (BranchDef + pixel
+ *  sourceY/mergeY), i.e. an element of `buildGeometry(layout).branches`.
+ *  Promoted here so GitGraphParticleField (and anything else that reads
+ *  geometry.branches) can import a real type instead of maintaining its
+ *  own structural copy by hand — that copy previously admitted in a
+ *  comment that it only existed because this export didn't. */
+export type GeometryBranch = ReturnType<typeof buildGeometry>["branches"][number];
+
+// ---------------------------------------------------------------------------
+// Ignition timing: every constant that governs the particle-connect ->
+// impact -> border-seal chain reaction, in one place. Previously these
+// lived as unlabeled literals scattered across GitGraphParticleField.tsx
+// (dt * 2.6, the 0.5s connector fade) and GitGraphActiveBorder.tsx (the
+// 0.55s pathLength transition) despite being one conceptual animation —
+// tuning "how snappy does the whole chain feel" meant hunting through two
+// files. Both now import from here.
+// ---------------------------------------------------------------------------
+
+export const IGNITION_TIMING = {
+  /** Progress-per-second added to the particle's one-shot travel each
+   *  frame (dt * travelSpeed). ~1/travelSpeed seconds to cross. */
+  travelSpeed: 2.6,
+  /** Seconds for the connector line to fade out after the particle lands
+   *  (the border has taken over by then). */
+  connectorFadeDuration: 0.5,
+  /** Seconds for the border's own pathLength draw-in/out. */
+  sealDuration: 0.55,
+  /** Seconds a newly-focused branch must stay focused before its particle
+   *  actually launches — absorbs fast scroll-throughs so the travel isn't
+   *  restarted a dozen times a second without ever completing. */
+  focusDebounce: 0.12,
+  /** Seconds for the one-shot impact flash at the particle's landing
+   *  point, and the "seam settle" pulse where the two border halves meet. */
+  flashDuration: 0.22,
+  seamSettleDuration: 0.3,
+  /** Seconds for the border's opacity crossfade specifically on replay
+   *  (`instant=true`) ignitions — the shape still snaps instantly (no
+   *  pathLength draw), but a hard opacity pop on every re-hover reads as
+   *  flicker, so opacity gets this separate, smoother fade instead. */
+  instantFadeDuration: 0.32,
+  /** Peak stroke/glow opacity on a replay ignition, vs. 0.85 the first
+   *  time — dimmer so repeated re-hovers aren't as hard on the eyes as
+   *  the one true "impact" moment. */
+  instantPeakOpacity: 0.2,
+} as const;

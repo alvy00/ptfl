@@ -26,7 +26,12 @@ import {
   TOTAL_ROWS,
   branchByProject,
 } from "@/lib/portfolio/gitGraphData";
-import { buildGeometry, drawRange } from "@/lib/portfolio/gitGraphGeometry";
+import {
+  buildGeometry,
+  drawRange,
+  activeBoxVerticalRange,
+  ACTIVE_BOX,
+} from "@/lib/portfolio/gitGraphGeometry";
 import { useLayoutTier, usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
 import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 
@@ -59,6 +64,24 @@ export function GitGraph() {
     null,
   );
   const branchHoverTimeout = useRef<number | undefined>(undefined);
+
+  // Which feature branch the particle connector's traveling light has
+  // actually landed on — set by GitGraphParticleField's onImpact callback,
+  // the moment (not before) the particle reaches the border's impact
+  // point. This is what gates the border's draw-in: while a branch is
+  // focused but the particle is still traveling, the border stays
+  // undrawn; only onImpact flips it. Cleared as soon as focus moves off
+  // the impacted branch (see the effect below focusedBranch's own
+  // declaration), which is what drives the border's reverse/undraw
+  // animation — GitGraphActiveBorder's `active` prop just reverses the
+  // same pathLength animation when it flips back to false, no separate
+  // "undrawing" state needed.
+  const [impactedBranch, setImpactedBranch] = useState<string | null>(null);
+  // True when the most recent onImpact for `impactedBranch` was a replay
+  // (GitGraphParticleField's instant=true) rather than a real particle
+  // landing — forwarded to GitGraphActiveBorder so it can pop straight to
+  // sealed instead of replaying its own draw-in animation too.
+  const [instantBorderKey, setInstantBorderKey] = useState<string | null>(null);
 
   const focusBranch = (group: string, bugfixKey?: string) => {
     window.clearTimeout(branchHoverTimeout.current);
@@ -270,6 +293,28 @@ export function GitGraph() {
   const isDimmed = (group: string) =>
     Boolean(focusedBranch) && group !== "main" && group !== focusedBranch;
 
+  // Focus moved off the branch that had impacted (hover-out, scrolled
+  // past, or a different branch took focus) — clear it so the border for
+  // the branch that lost focus reverses/undraws.
+  useEffect(() => {
+    setImpactedBranch((current) => (current && current !== focusedBranch ? null : current));
+  }, [focusedBranch]);
+
+  // GitGraphParticleField mounts nothing at all when reduceMotion or
+  // isCoarsePointer is true (no canvas, no rAF loop) — which means its
+  // onImpact callback, the only thing that ever sets impactedBranch, never
+  // fires. Without this, the border silently never lit up for any touch
+  // user or anyone with prefers-reduced-motion set: hover/focus registered
+  // with zero visual acknowledgment, which reads as "my input didn't
+  // register" — worse than the old always-on fade it replaced. When the
+  // particle field is inactive, treat a branch as impacted the instant
+  // it's focused, bypassing the connect->impact chain entirely rather than
+  // waiting on a signal that will never come.
+  useEffect(() => {
+    if (!(reduceMotion || isCoarsePointer)) return;
+    setImpactedBranch(focusedBranch ?? null);
+  }, [reduceMotion, isCoarsePointer, focusedBranch]);
+
   // Border-only distinction: scroll-driven auto-focus never targets a
   // bugfix specifically, so it's always the feature border's turn there.
   // Only an explicit hover on a bugfix commit sets this.
@@ -313,8 +358,13 @@ export function GitGraph() {
           layout={layout}
           graphW={graphW}
           focusedBranch={focusedBranch}
+          nodeScale={nodeScale}
           reduceMotion={reduceMotion}
           isCoarsePointer={isCoarsePointer}
+          onImpact={(name, instant) => {
+            setImpactedBranch(name);
+            setInstantBorderKey(instant ? name : null);
+          }}
         />
 
         {/* SVG graph */}
@@ -428,49 +478,58 @@ export function GitGraph() {
               are fixed px (not tier-scaled) since the ask here is a
               specific flat aspect ratio, not proportional breathing room. */}
           {branches.map((b) => {
-            const HORIZONTAL_EXPAND = 20; // ~1.25rem each side
-            // CareerPilot's box top was clipping through its first commit
-            // line (label + padding needed more room than other branches
-            // apparently needed) — bumped just for that branch rather than
-            // globally, since the other branches were already fine.
-            const TOP_CLEARANCE = 4;
-            const BOTTOM_CLEARANCE = 0;
+            // Reads from the same activeBoxVerticalRange() helper the
+            // particle field's impact-point targeting uses — this box and
+            // the particle's landing spot can no longer drift apart.
+            const { top, bottom } = activeBoxVerticalRange(b.sourceY, b.mergeY, "feature");
+            const isFocused = focusedBranch === b.name && !focusedBugfixKey;
             return (
               <div
                 key={`border-${b.name}`}
                 className="absolute"
                 style={{
-                  left: -HORIZONTAL_EXPAND,
-                  right: -HORIZONTAL_EXPAND,
-                  top: b.sourceY - TOP_CLEARANCE,
-                  height: b.mergeY - b.sourceY + TOP_CLEARANCE + BOTTOM_CLEARANCE,
+                  left: -ACTIVE_BOX.horizontalExpand,
+                  right: -ACTIVE_BOX.horizontalExpand,
+                  top,
+                  height: bottom - top,
                 }}
               >
+                {/* Gated on impactedBranch, not just isFocused: the border
+                    only starts its draw-in once the particle's traveling
+                    light has actually reached this box (GitGraphParticleField's
+                    onImpact -> setImpactedBranch), not the instant the
+                    branch becomes focused. That's the chain reaction —
+                    focus launches the particle, impact ignites the border. */}
                 <GitGraphActiveBorder
-                  active={focusedBranch === b.name && !focusedBugfixKey}
+                  active={isFocused && impactedBranch === b.name}
                   color={b.color}
+                  reduceMotion={reduceMotion}
+                  instant={instantBorderKey === b.name}
                 />
               </div>
             );
           })}
           {bugfixBranches.map((b) => {
-            const HORIZONTAL_EXPAND = 20;
-            const TOP_CLEARANCE = 4;
-            const BOTTOM_CLEARANCE = 12;
+            const { top, bottom } = activeBoxVerticalRange(b.sourceY, b.mergeY, "bugfix");
             return (
               <div
                 key={`border-${b.name}`}
                 className="absolute"
                 style={{
-                  left: -HORIZONTAL_EXPAND,
-                  right: -HORIZONTAL_EXPAND,
-                  top: b.sourceY - TOP_CLEARANCE,
-                  height: b.mergeY - b.sourceY + TOP_CLEARANCE + BOTTOM_CLEARANCE,
+                  left: -ACTIVE_BOX.horizontalExpand,
+                  right: -ACTIVE_BOX.horizontalExpand,
+                  top,
+                  height: bottom - top,
                 }}
               >
+                {/* No particle targets bugfix boxes (GitGraphParticleField
+                    only tracks `branches`, i.e. feature branches) — so
+                    these keep the simple focus-gated draw-in/out, no
+                    impact gate. */}
                 <GitGraphActiveBorder
                   active={focusedBranch === b.branchGroup && focusedBugfixKey === b.bugfixKey}
                   color={b.color}
+                  reduceMotion={reduceMotion}
                 />
               </div>
             );
