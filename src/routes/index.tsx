@@ -318,15 +318,42 @@ export function Index() {
                 </div>
               </motion.div>
 
-              {/* Synchronized Footer Arrival */}
+              {/* StatsPanel — reads as a "compilation summary" (commit
+                  counts, LOC, tech parsed). Split from ContributingFooter
+                  below into its own component-scoped whileInView rather
+                  than the two sharing one motion.div and one entrance —
+                  a single monolithic block risks a bigger layout shift on
+                  mobile when it lands, and forces both pieces to animate
+                  in lockstep instead of as two distinct beats. Every
+                  animated property here is opacity/y (transform), which
+                  Framer Motion promotes to its own GPU layer and manages
+                  `will-change` for automatically only while the animation
+                  is actually running — no manual will-change needed. */}
               <motion.div
-                initial={{ opacity: 0, y: 60 }}
+                initial={{ opacity: 0, y: 50 }}
                 whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-50px" }}
-                transition={{ duration: 0.8, ease: "easeOut", delay: 0.1 }}
-                className="mt-20 space-y-12 bg-[#0e0f13]"
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.7, ease: "easeOut" }}
+                className="mt-16 bg-[#0e0f13]"
               >
                 <StatsPanel />
+              </motion.div>
+
+              {/* ContributingFooter — the final prompt/action node
+                  ("connect", "open an issue," etc.). Its own viewport
+                  trigger + a small delay relative to StatsPanel's own
+                  transition (not relative to StatsPanel's *trigger* —
+                  each observes independently) is what gives the two an
+                  actual sequential feel on a normal scroll speed, rather
+                  than both firing in the same instant because a fast
+                  scroll crossed both margins in one frame. */}
+              <motion.div
+                initial={{ opacity: 0, y: 50 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-100px" }}
+                transition={{ duration: 0.7, ease: "easeOut", delay: 0.15 }}
+                className="mt-12 bg-[#0e0f13]"
+              >
                 <ContributingFooter />
               </motion.div>
             </div>

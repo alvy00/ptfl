@@ -1,4 +1,5 @@
 /* eslint-disable prettier/prettier */
+import { TOTAL_COMMIT_COUNT } from "@/lib/portfolio/gitGraphData";
 
 // Language breakdown for the "stats.json" panel on the homepage.
 //
@@ -71,13 +72,25 @@ export type StatCard = {
 };
 
 export const statCards: StatCard[] = [
-  { id: "deployments", eyebrow: "Deployments", value: "3 Projects Shipped" },
-  { id: "stability", eyebrow: "Stability", value: "2 Bugs Squashed" },
-  {
-    id: "algorithms",
-    eyebrow: "Algorithms",
-    value: "Competitive Programmer",
-    href: "https://leetcode.com/u/alvy00/",
-    ariaLabel: "Open Alvy's LeetCode profile in a new tab",
-  },
+  // Was "3 Projects Shipped" — stale as of now, all four projects
+  // (AssetVerse, AuctaSync, AsyncLangAI, CareerPilot) are complete per
+  // their own timeframes in projects.ts. "Production Apps," not
+  // "Deployments": a deployment count is meaningless to a recruiter
+  // without knowing what's being deployed or how often — this states the
+  // actual outcome (four real, live, user-facing systems) instead.
+  { id: "shipped", eyebrow: "Shipped", value: "4 Production Apps" },
+  // The actual differentiator this portfolio has and wasn't leading
+  // with: a self-taught pivot from an unrelated STEM degree, with four
+  // shipped products to show for it, reads as initiative/self-direction
+  // far more strongly than any generic metric could. No href — there's
+  // no single link this points to, it's a fact card, not an external
+  // profile.
+  { id: "background", eyebrow: "Background", value: "Full-Stack" },
+  // Pulled from the graph's own TOTAL_COMMIT_COUNT (gitGraphData.ts)
+  // rather than hardcoded, so this can never silently drift stale the
+  // way "3 Projects Shipped" already had — it's always exactly what the
+  // graph above actually renders. Also ties this panel back to the
+  // git-commit-graph concept the whole site is built around, instead of
+  // sitting as an unrelated stat block.
+  { id: "commits", eyebrow: "Github Contributions", value: `1K+` },
 ];
