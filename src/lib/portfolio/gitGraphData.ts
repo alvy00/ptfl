@@ -26,7 +26,17 @@ export const LAYOUTS: Record<Tier, Layout> = {
 // Fixed offsets (in the old code: +27 / -27 and +24 / -24) expressed as a
 // ratio of row height instead, so they scale with the layout tier too.
 export const FEATURE_OFFSET_RATIO = 27 / 68;
-export const BUGFIX_OFFSET_RATIO = 24 / 68;
+// Was 24/68 (~0.35 of a row) — sourceRow/mergeRow for a bugfix sit exactly
+// one row away from its actual first/last commit (e.g. duplicate-submit:
+// sourceRow 26, first commit at row 27), same structural gap
+// FEATURE_OFFSET_RATIO also has to close. But a feature box holds 5-7
+// commits, so that gap is a small fraction of its total height; a bugfix
+// box only ever holds 2 commits, so the same absolute gap ends up bigger
+// than the actual content — the empty space the border showed. 52/68
+// (~0.76 of a row) pulls the boundary in close to the commit itself,
+// leaving a small, intentional breath of clearance rather than a near-
+// full empty row above/below.
+export const BUGFIX_OFFSET_RATIO = 52 / 68;
 
 // Bugfix branches always use this color, regardless of which project they
 // belong to — color now encodes "what kind of branch is this" (project vs.

@@ -234,7 +234,12 @@ export const ACTIVE_BOX = {
    *  the border layer and the text column. */
   textColumnGap: 24,
   feature: { topClearance: 4, bottomClearance: 0 },
-  bugfix: { topClearance: 4, bottomClearance: 12 },
+  // bottomClearance was 12 — a leftover from before BUGFIX_OFFSET_RATIO
+  // (gitGraphData.ts) was tightened to close most of the gap at its
+  // source; keeping this at feature's level now that the bigger offset
+  // fix is in place, rather than stacking two separate paddings on top
+  // of each other.
+  bugfix: { topClearance: 4, bottomClearance: 4 },
 } as const;
 
 /** The box's left edge, in the same coordinate space GitGraphParticleField's

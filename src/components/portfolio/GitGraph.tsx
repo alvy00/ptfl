@@ -16,24 +16,14 @@ import { GitGraphScrollProgress } from "./GitGraphScrollProgress";
 import { GitGraphAmbientGlow } from "./GitGraphAmbientGlow";
 import { GitGraphLegend } from "./GitGraphLegend";
 import { GitGraphNode } from "./GitGraphNode";
-import { GitGraphCommitRow } from "./GitGraphCommitRow";
-import { GitGraphActiveBorder } from "./GitGraphActiveBorder";
+import { GitGraphFeatureCard } from "./GitGraphFeatureCard";
+import { GitGraphBugfixBox } from "./GitGraphBugfixBox";
+import { GitGraphCommitTextColumn } from "./GitGraphCommitTextColumn";
 import { GitGraphParticleField } from "./GitGraphParticleField";
 
-import {
-  BRANCH_DEFS,
-  BUGFIX_DEFS,
-  LAYOUTS,
-  PALETTE,
-  TOTAL_ROWS,
-  branchByProject,
-} from "@/lib/portfolio/gitGraphData";
-import {
-  buildGeometry,
-  drawRange,
-  activeBoxVerticalRange,
-  ACTIVE_BOX,
-} from "@/lib/portfolio/gitGraphGeometry";
+import { BRANCH_DEFS, LAYOUTS, PALETTE, TOTAL_ROWS } from "@/lib/portfolio/gitGraphData";
+import { buildGeometry } from "@/lib/portfolio/gitGraphGeometry";
+import { useGitGraphDrawProgress } from "@/lib/portfolio/useGitGraphDrawProgress";
 import { useLayoutTier, usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
 import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 
@@ -119,7 +109,7 @@ export function GitGraph() {
     // commits start their reveal noticeably earlier in the scroll. Kept
     // modest (not "start end", the earliest possible trigger) — this is a
     // nudge, not a full retrigger of the whole reveal calibration.
-    offset: ["start 80%", "end end"],
+    offset: ["start 65%", "end end"],
   });
   const spineProgress = useTransform(scrollYProgress, [0, 1], [0, 1]);
   const spineY2 = useTransform(spineProgress, [0, 1], [yOf(0), yOf(TOTAL_ROWS - 1)]);
@@ -181,50 +171,9 @@ export function GitGraph() {
     }
   });
 
-  // Branch lines draw in — and un-draw on scroll-up — scrubbed directly to
-  // scroll position, rather than a one-shot whileInView animation. Declared
-  // explicitly (not via .map) so this stays valid per rules-of-hooks.
-  const assetverseDraw = useTransform(
-    smoothProgress,
-    drawRange(branchByProject("assetverse").sourceRow, branchByProject("assetverse").mergeRow),
-    [0, 1],
-  );
-  const auctasyncDraw = useTransform(
-    smoothProgress,
-    drawRange(branchByProject("auctasync").sourceRow, branchByProject("auctasync").mergeRow),
-    [0, 1],
-  );
-  const asynclangaiDraw = useTransform(
-    smoothProgress,
-    drawRange(branchByProject("asynclangai").sourceRow, branchByProject("asynclangai").mergeRow),
-    [0, 1],
-  );
-  const careerpilotDraw = useTransform(
-    smoothProgress,
-    drawRange(branchByProject("careerpilot").sourceRow, branchByProject("careerpilot").mergeRow),
-    [0, 1],
-  );
-  const auctasyncBugfixDraw = useTransform(
-    smoothProgress,
-    drawRange(BUGFIX_DEFS[0].sourceRow, BUGFIX_DEFS[0].mergeRow),
-    [0, 1],
-  );
-  const careerpilotBugfixDraw = useTransform(
-    smoothProgress,
-    drawRange(BUGFIX_DEFS[1].sourceRow, BUGFIX_DEFS[1].mergeRow),
-    [0, 1],
-  );
-
-  const featureDrawByName: Record<string, typeof assetverseDraw> = {
-    "feat/assetverse": assetverseDraw,
-    "feat/auctasync": auctasyncDraw,
-    "feat/asynclangai": asynclangaiDraw,
-    "feat/careerpilot": careerpilotDraw,
-  };
-  const bugfixDrawByName: Record<string, typeof auctasyncBugfixDraw> = {
-    "bugfix/auctasync-race-condition": auctasyncBugfixDraw,
-    "bugfix/careerpilot-session-state": careerpilotBugfixDraw,
-  };
+  // Per-branch pathLength progress — see the hook for why this can't just
+  // be built via .map() (rules-of-hooks).
+  const { featureDrawByName, bugfixDrawByName } = useGitGraphDrawProgress(smoothProgress);
 
   useEffect(() => {
     let timeoutId: number;
@@ -288,9 +237,9 @@ export function GitGraph() {
   };
 
   // Single entry point for opening a project's deep-dive — whatever UI
-  // triggers it (the whole-card click/Enter below, previously it would
-  // have been per-commit) always resolves to the exact same modal state
-  // shape: just which project, nothing commit-specific. This replaced a
+  // triggers it (the whole-card click/Enter, previously it would have
+  // been per-commit) always resolves to the exact same modal state shape:
+  // just which project, nothing commit-specific. This replaced a
   // per-commit selectedCommit-shaped payload that varied by which row was
   // clicked despite always opening the same project modal underneath.
   const openProjectCard = (projectKey: ProjectKey) => {
@@ -491,7 +440,15 @@ export function GitGraph() {
             gated — so switching the active branch while scrolling is a
             plain crossfade, never a restart. */}
         <div
-          className="absolute inset-y-0 right-1.5 sm:right-4 pointer-events-none"
+          // Right offset bumped up from right-1.5/right-4 — the active
+          // border box expands past this wrapper's own edges by
+          // ACTIVE_BOX.horizontalExpand on hover/focus, and with the old,
+          // tighter margin that expansion ran past the viewport's right
+          // edge and got cut off (see the circled screenshot). Same value
+          // is mirrored on the text column's wrapper below so the two stay
+          // aligned — this only shifts the shared right margin, not their
+          // relative position to each other.
+          className="absolute inset-y-0 right-4 sm:right-10 pointer-events-none"
           style={{ left: `calc(${graphW}px + 1.5rem)` }}
         >
           {/* Rebalanced per latest markup: vertical stays tight against
@@ -502,133 +459,55 @@ export function GitGraph() {
               are fixed px (not tier-scaled) since the ask here is a
               specific flat aspect ratio, not proportional breathing room. */}
           {branches.map((b) => {
-            // Reads from the same activeBoxVerticalRange() helper the
-            // particle field's impact-point targeting uses — this box and
-            // the particle's landing spot can no longer drift apart.
-            const { top, bottom } = activeBoxVerticalRange(b.sourceY, b.mergeY, "feature");
             const isFocused = focusedBranch === b.name && !focusedBugfixKey;
             const projectName = projects[b.projectKey].name.split(" — ")[0];
             return (
-              <div
+              <GitGraphFeatureCard
                 key={`border-${b.name}`}
-                role="button"
-                tabIndex={0}
-                aria-label={`Open ${projectName} project details`}
-                // Whole-card click target — the actual pivot. Previously
-                // every commit row in this branch had its own onClick,
-                // all leading to the exact same project modal regardless
-                // of which row was clicked. One handler on this one
-                // wrapper (event delegation) replaces N per-row handlers
-                // with N identical destinations.
-                onClick={() => openProjectCard(b.projectKey)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    openProjectCard(b.projectKey);
-                  }
-                }}
-                // Hover now lives on the card itself, not on individual
-                // commit rows — GitGraphCommitRow's feature-commit rows no
-                // longer call focusBranch at all (see isFeaturePassive),
-                // and are explicitly set to pointer-events:none so hover/
-                // click here isn't blocked by the now-inert text sitting
-                // visually on top of this box.
-                onMouseEnter={() => focusBranch(b.name)}
-                onMouseLeave={() => unfocusBranch(b.name)}
-                onFocus={() => focusBranch(b.name)}
-                onBlur={() => unfocusBranch(b.name)}
-                // Elevation removed from the card itself — it now only
-                // gets the glow/shadow on hover/focus, no lift. The rows
-                // (GitGraphCommitRow) still elevate on branchFocused,
-                // independently of this — that's driven by React state,
-                // not tied to this element's own CSS transform at all, so
-                // removing the transform classes here doesn't touch it.
-                className="group absolute cursor-pointer pointer-events-auto rounded-lg outline-none transition-shadow duration-200 ease-out hover:shadow-2xl hover:shadow-black/40 focus-visible:shadow-2xl focus-visible:shadow-black/40 motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-[var(--card-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0f13]"
-                style={{
-                  left: -ACTIVE_BOX.horizontalExpand,
-                  right: -ACTIVE_BOX.horizontalExpand,
-                  top,
-                  height: bottom - top,
-                  ["--card-ring-color" as string]: b.color,
-                }}
-              >
-                {/* Gated on impactedBranch, not just isFocused: the border
-                    only starts its draw-in once the particle's traveling
-                    light has actually reached this box (GitGraphParticleField's
-                    onImpact -> setImpactedBranch), not the instant the
-                    branch becomes focused. That's the chain reaction —
-                    focus launches the particle, impact ignites the border. */}
-                <GitGraphActiveBorder
-                  active={isFocused && impactedBranch === b.name}
-                  color={b.color}
-                  reduceMotion={reduceMotion}
-                  instant={instantBorderKey === b.name}
-                />
-              </div>
+                b={b}
+                projectName={projectName}
+                isFocused={isFocused}
+                impactedBranch={impactedBranch}
+                instantBorderKey={instantBorderKey}
+                reduceMotion={reduceMotion}
+                onOpenProject={openProjectCard}
+                focusBranch={focusBranch}
+                unfocusBranch={unfocusBranch}
+              />
             );
           })}
-          {bugfixBranches.map((b) => {
-            const { top, bottom } = activeBoxVerticalRange(b.sourceY, b.mergeY, "bugfix");
-            return (
-              <div
-                key={`border-${b.name}`}
-                className="absolute"
-                aria-hidden="true"
-                style={{
-                  left: -ACTIVE_BOX.horizontalExpand,
-                  right: -ACTIVE_BOX.horizontalExpand,
-                  top,
-                  height: bottom - top,
-                }}
-              >
-                {/* No particle targets bugfix boxes (GitGraphParticleField
-                    only tracks `branches`, i.e. feature branches) — so
-                    these keep the simple focus-gated draw-in/out, no
-                    impact gate. */}
-                <GitGraphActiveBorder
-                  active={focusedBranch === b.branchGroup && focusedBugfixKey === b.bugfixKey}
-                  color={b.color}
-                  reduceMotion={reduceMotion}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Text column — its left offset tracks the (responsive) graph
-            width directly, so the two always line up at every tier. */}
-        <ul
-          className="absolute inset-y-0 right-1.5 sm:right-4 pointer-events-none list-none m-0 p-0"
-          style={{ left: `calc(${graphW}px + 1.5rem)` }}
-        >
-          {allNodes.map((n) => (
-            <GitGraphCommitRow
-              key={n.hash}
-              n={n}
-              isHovered={hovered === n.hash}
-              isHighlighted={highlighted === n.hash}
-              dimmed={isDimmed(n.branchGroup)}
-              // `dimmed` only tells a row "some OTHER branch has focus" —
-              // both "my branch is focused" and "nothing is focused" read
-              // as dimmed=false, so it can't drive a brighten-on-focus
-              // effect by itself. This is the positive signal: true only
-              // when THIS row's own branch is the one currently focused.
-              branchFocused={n.branchGroup !== "main" && n.branchGroup === focusedBranch}
+          {bugfixBranches.map((b) => (
+            <GitGraphBugfixBox
+              key={`border-${b.name}`}
+              b={b}
+              active={focusedBranch === b.branchGroup && focusedBugfixKey === b.bugfixKey}
               reduceMotion={reduceMotion}
-              progress={smoothProgress}
-              rowH={layout.rowH}
-              onOpen={openCommit}
-              onEnter={() => {
-                setHovered(n.hash);
-                focusBranch(n.branchGroup, n.isBugfix ? n.bugfixKey : undefined);
-              }}
-              onLeave={() => {
-                setHovered((h) => (h === n.hash ? null : h));
-                unfocusBranch(n.branchGroup);
-              }}
+              focusBranch={focusBranch}
+              unfocusBranch={unfocusBranch}
             />
           ))}
-        </ul>
+        </div>
+
+        <GitGraphCommitTextColumn
+          allNodes={allNodes}
+          graphW={graphW}
+          hovered={hovered}
+          highlighted={highlighted}
+          focusedBranch={focusedBranch}
+          isDimmed={isDimmed}
+          reduceMotion={reduceMotion}
+          progress={smoothProgress}
+          rowH={layout.rowH}
+          onOpen={openCommit}
+          onEnter={(n) => {
+            setHovered(n.hash);
+            focusBranch(n.branchGroup, n.isBugfix ? n.bugfixKey : undefined);
+          }}
+          onLeave={(n) => {
+            setHovered((h) => (h === n.hash ? null : h));
+            unfocusBranch(n.branchGroup);
+          }}
+        />
       </div>
 
       <CommitModal selection={selection} onClose={() => setSelection(null)} />
