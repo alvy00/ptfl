@@ -8,9 +8,7 @@ import {
 } from "framer-motion";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import {
-  commitDateFor,
   projects,
-  relativeTime,
   type Project,
   type ProjectKey,
 } from "@/data/portfolio/projects";
@@ -19,14 +17,7 @@ import { AskProject } from "./AskProject";
 import { GlassSpecular, useGlassTilt } from "./useGlassTilt";
 
 export type CommitSelection =
-  | {
-      kind: "feature";
-      hash: string;
-      message: string;
-      projectKey: ProjectKey;
-      commitIndex: number;
-      commitTotal: number;
-    }
+  | { kind: "feature"; projectKey: ProjectKey }
   | { kind: "main"; hash: string; message: string; anchorX: number; anchorY: number }
   | { kind: "bugfix"; hash: string; message: string; bugfixKey: BugfixKey }
   | {
@@ -452,13 +443,6 @@ function FeatureModal({
   onClose: () => void;
 }) {
   const project: Project = projects[selection.projectKey];
-  const date = commitDateFor(project.timeframe, selection.commitIndex, selection.commitTotal);
-  const rel = relativeTime(date);
-  const dateLabel = date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
   const accent = project.accent;
   const titleId = useId();
   const containerRef = useFocusTrap<HTMLDivElement>(true);
@@ -505,34 +489,6 @@ function FeatureModal({
         {dragEnabled && <DragHandle dragControls={dragControls} />}
         <div className="overflow-y-auto flex-1 p-5 sm:p-8 md:p-9.5 custom-scrollbar overscroll-contain">
           <div className="max-w-[62ch] mx-auto">
-            <div
-              className="mb-5 rounded-lg border p-4 sm:p-5"
-              style={{
-                borderColor: `${accent}22`,
-                background: `linear-gradient(180deg, ${accent}08, transparent)`,
-              }}
-            >
-              <div className="flex items-center gap-2.5 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-400">
-                <span
-                  className="inline-block h-2 w-2 rounded-full shrink-0"
-                  style={{ background: accent, boxShadow: `0 0 8px ${accent}` }}
-                />
-                commit
-                <span className="text-gray-600">·</span>
-                <span className="tabular-nums text-gray-400 text-[11px] sm:text-[13px]">
-                  {selection.hash}
-                </span>
-              </div>
-              <p className="mt-2 text-sm sm:text-base leading-snug text-white break-words">
-                {selection.message}
-              </p>
-              <p className="mt-2 text-[11px] sm:text-[13px] text-gray-500">
-                <span>{dateLabel}</span>
-                <span className="mx-1.5 text-gray-700">·</span>
-                <span>{rel}</span>
-              </p>
-            </div>
-
             <div className="mb-1 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
               project
             </div>

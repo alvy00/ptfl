@@ -10,6 +10,8 @@ import {
 import { useEffect, useRef, useState, useMemo, type MouseEvent } from "react";
 
 import { CommitModal, type CommitSelection } from "./CommitModal";
+import type { ProjectKey } from "@/data/portfolio/projects";
+import { projects } from "@/data/portfolio/projects";
 import { GitGraphScrollProgress } from "./GitGraphScrollProgress";
 import { GitGraphAmbientGlow } from "./GitGraphAmbientGlow";
 import { GitGraphLegend } from "./GitGraphLegend";
@@ -109,14 +111,27 @@ export function GitGraph() {
 
   const { scrollYProgress } = useScroll({
     target: containerRef,
-    offset: ["start center", "end end"],
+    // "start center" -> "start 80%": progress used to sit at 0 until the
+    // graph's top edge reached the vertical CENTER of the viewport, so
+    // nothing revealed until the graph was already half-scrolled-past.
+    // "80%" is a point near the bottom of the viewport instead — progress
+    // starts advancing as soon as the graph is barely on-screen, so nodes/
+    // commits start their reveal noticeably earlier in the scroll. Kept
+    // modest (not "start end", the earliest possible trigger) — this is a
+    // nudge, not a full retrigger of the whole reveal calibration.
+    offset: ["start 80%", "end end"],
   });
   const spineProgress = useTransform(scrollYProgress, [0, 1], [0, 1]);
   const spineY2 = useTransform(spineProgress, [0, 1], [yOf(0), yOf(TOTAL_ROWS - 1)]);
 
+  // Stiffness bumped, damping trimmed slightly on both configs — a small,
+  // deliberate nudge (not a full retune): smoothProgress now tracks the
+  // raw scroll position a bit more tightly, so node/commit reveals read
+  // as keeping up with the scroll rather than trailing behind it. Still a
+  // genuine spring (not instant/1:1), just a snappier one.
   const scrollSpringConfig = isCoarsePointer
-    ? { stiffness: 140, damping: 24, mass: 0.35 } // snappier — touch scroll has its own OS momentum already
-    : { stiffness: 90, damping: 26, mass: 0.5 };
+    ? { stiffness: 160, damping: 22, mass: 0.35 } // snappier — touch scroll has its own OS momentum already
+    : { stiffness: 110, damping: 24, mass: 0.5 };
 
   const smoothProgress = useSpring(spineProgress, scrollSpringConfig);
 
@@ -265,16 +280,21 @@ export function GitGraph() {
         anchorX: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
         anchorY: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
       });
-    } else if (n.projectKey) {
-      setSelection({
-        kind: "feature",
-        hash: n.hash,
-        message: n.message,
-        projectKey: n.projectKey,
-        commitIndex: n.commitIndex ?? 0,
-        commitTotal: n.commitTotal ?? 1,
-      });
     }
+    // No feature-commit branch here anymore: those rows are passive (see
+    // GitGraphCommitRow's isFeaturePassive) and never call onOpen. Opening
+    // a project is openProjectCard below, wired to the whole card instead
+    // of any individual commit.
+  };
+
+  // Single entry point for opening a project's deep-dive — whatever UI
+  // triggers it (the whole-card click/Enter below, previously it would
+  // have been per-commit) always resolves to the exact same modal state
+  // shape: just which project, nothing commit-specific. This replaced a
+  // per-commit selectedCommit-shaped payload that varied by which row was
+  // clicked despite always opening the same project modal underneath.
+  const openProjectCard = (projectKey: ProjectKey) => {
+    setSelection({ kind: "feature", projectKey });
   };
 
   const dimTransition = reduceMotion
@@ -473,7 +493,6 @@ export function GitGraph() {
         <div
           className="absolute inset-y-0 right-1.5 sm:right-4 pointer-events-none"
           style={{ left: `calc(${graphW}px + 1.5rem)` }}
-          aria-hidden="true"
         >
           {/* Rebalanced per latest markup: vertical stays tight against
               the commit range (just a small fixed clearance, not a
@@ -488,15 +507,49 @@ export function GitGraph() {
             // the particle's landing spot can no longer drift apart.
             const { top, bottom } = activeBoxVerticalRange(b.sourceY, b.mergeY, "feature");
             const isFocused = focusedBranch === b.name && !focusedBugfixKey;
+            const projectName = projects[b.projectKey].name.split(" — ")[0];
             return (
               <div
                 key={`border-${b.name}`}
-                className="absolute"
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${projectName} project details`}
+                // Whole-card click target — the actual pivot. Previously
+                // every commit row in this branch had its own onClick,
+                // all leading to the exact same project modal regardless
+                // of which row was clicked. One handler on this one
+                // wrapper (event delegation) replaces N per-row handlers
+                // with N identical destinations.
+                onClick={() => openProjectCard(b.projectKey)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    openProjectCard(b.projectKey);
+                  }
+                }}
+                // Hover now lives on the card itself, not on individual
+                // commit rows — GitGraphCommitRow's feature-commit rows no
+                // longer call focusBranch at all (see isFeaturePassive),
+                // and are explicitly set to pointer-events:none so hover/
+                // click here isn't blocked by the now-inert text sitting
+                // visually on top of this box.
+                onMouseEnter={() => focusBranch(b.name)}
+                onMouseLeave={() => unfocusBranch(b.name)}
+                onFocus={() => focusBranch(b.name)}
+                onBlur={() => unfocusBranch(b.name)}
+                // Elevation removed from the card itself — it now only
+                // gets the glow/shadow on hover/focus, no lift. The rows
+                // (GitGraphCommitRow) still elevate on branchFocused,
+                // independently of this — that's driven by React state,
+                // not tied to this element's own CSS transform at all, so
+                // removing the transform classes here doesn't touch it.
+                className="group absolute cursor-pointer pointer-events-auto rounded-lg outline-none transition-shadow duration-200 ease-out hover:shadow-2xl hover:shadow-black/40 focus-visible:shadow-2xl focus-visible:shadow-black/40 motion-reduce:transition-none focus-visible:ring-2 focus-visible:ring-[var(--card-ring-color)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0e0f13]"
                 style={{
                   left: -ACTIVE_BOX.horizontalExpand,
                   right: -ACTIVE_BOX.horizontalExpand,
                   top,
                   height: bottom - top,
+                  ["--card-ring-color" as string]: b.color,
                 }}
               >
                 {/* Gated on impactedBranch, not just isFocused: the border
@@ -520,6 +573,7 @@ export function GitGraph() {
               <div
                 key={`border-${b.name}`}
                 className="absolute"
+                aria-hidden="true"
                 style={{
                   left: -ACTIVE_BOX.horizontalExpand,
                   right: -ACTIVE_BOX.horizontalExpand,
@@ -554,6 +608,12 @@ export function GitGraph() {
               isHovered={hovered === n.hash}
               isHighlighted={highlighted === n.hash}
               dimmed={isDimmed(n.branchGroup)}
+              // `dimmed` only tells a row "some OTHER branch has focus" —
+              // both "my branch is focused" and "nothing is focused" read
+              // as dimmed=false, so it can't drive a brighten-on-focus
+              // effect by itself. This is the positive signal: true only
+              // when THIS row's own branch is the one currently focused.
+              branchFocused={n.branchGroup !== "main" && n.branchGroup === focusedBranch}
               reduceMotion={reduceMotion}
               progress={smoothProgress}
               rowH={layout.rowH}

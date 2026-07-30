@@ -14,6 +14,7 @@ export function GitGraphCommitRow({
   isHovered,
   isHighlighted,
   dimmed,
+  branchFocused,
   reduceMotion,
   onOpen,
   onEnter,
@@ -25,6 +26,13 @@ export function GitGraphCommitRow({
   isHovered: boolean;
   isHighlighted: boolean;
   dimmed: boolean;
+  /** True only when THIS row's own branch is the currently-focused one
+   *  (hover or scroll-focus on its whole card) — distinct from `dimmed`,
+   *  which can't tell "my branch is focused" apart from "nothing is
+   *  focused" (both read as dimmed=false). Drives the `$ on feat/...`
+   *  label's brighten below. Always false for main-trunk rows, which
+   *  don't have a "card" to focus in the first place. */
+  branchFocused: boolean;
   reduceMotion: boolean;
   onOpen: (n: NodeMeta, evt?: MouseEvent) => void;
   onEnter: () => void;
@@ -42,6 +50,19 @@ export function GitGraphCommitRow({
 }) {
   const isMilestone = n.message.toLowerCase().includes("milestone");
   const pointerCoarse = usePointerCoarse();
+  // Pivot: a plain feature-branch commit (not main, not a bugfix, not
+  // HEAD) is no longer its own clickable thing. Every one of them used to
+  // open the exact same project modal regardless of which specific commit
+  // was clicked — a "click-dead" affordance (individual hover rings and
+  // button semantics on 20 different rows, all leading to one identical
+  // destination). The project's whole card (GitGraphActiveBorder's box in
+  // GitGraph.tsx) is the click target now; these rows go back to being
+  // exactly what they visually already look like — a read-only commit
+  // log — and their own hover/click handlers are dropped entirely rather
+  // than wired to a no-op, so there's no dead interactive surface left
+  // sitting on top of the card intercepting its hover/click (see the
+  // pointerEvents override on the outer <li> below).
+  const isFeaturePassive = !n.isMain && !n.isBugfix && !n.isHead;
   // HEAD is the terminus of the whole graph — the peak-end moment, where a
   // visitor who's scrolled the entire commit history lands right as the
   // "open to work" copy appears. Treating it like every other trunk commit
@@ -91,6 +112,13 @@ export function GitGraphCommitRow({
   // same rowOpacity value closes that gap: below the threshold the row is
   // inert, matching what's actually visible.
   const rowPointerEvents = useTransform(rowOpacity, (v) => (v > 0.05 ? "auto" : "none"));
+  // Subscribed into plain state rather than passed as a MotionValue
+  // directly in style — that auto-unwrapping only happens inside a
+  // motion.* component's style prop, and the outer element below is a
+  // plain <li> (see its comment for why), so this needs an explicit
+  // subscription like `inView` below already does for the same reason.
+  const [pointerEventsValue, setPointerEventsValue] = useState(rowPointerEvents.get());
+  useMotionValueEvent(rowPointerEvents, "change", setPointerEventsValue);
 
   // --- terminal-stream decrypt reveal -------------------------------------
   // Deliberately NOT applied to every row. At 26 rows, a mandatory
@@ -130,14 +158,34 @@ export function GitGraphCommitRow({
   // -------------------------------------------------------------------------
 
   return (
-    <motion.li
+    <li
       className="absolute inset-x-0 flex flex-col"
       style={{
         top: n.y,
-        transform: "translateY(-50%)",
+        // Composed with the existing -50% vertical centering, not a
+        // replacement for it — when this row's branch is focused (hover
+        // OR scroll-auto-focus; same signal that ignites
+        // GitGraphActiveBorder), it lifts an extra 6px. The border/card
+        // itself (GitGraph.tsx) no longer elevates on hover — only glows
+        // — so this row-level lift is now the only elevation happening,
+        // not a sync partner for a card-level one.
+        //
+        // This element was previously a <motion.li> despite never using
+        // any actual Framer Motion feature on itself (no initial/animate/
+        // whileInView) — just plain style/className. That's exactly the
+        // problem: motion.* components own the `transform` CSS property
+        // internally, composing it from their own x/y/scale/rotate motion
+        // values. With none of those set, Framer Motion kept re-writing
+        // the DOM's real transform back to its own computed value (~none)
+        // on every render, silently discarding whatever raw string we put
+        // in style.transform here — which is exactly why bumping the
+        // value from 4px to 6px changed nothing. A plain <li> has no such
+        // ownership; React just sets the inline style directly and the
+        // CSS `transition` below animates it normally.
+        transform: branchFocused ? "translateY(calc(-50% - 6px))" : "translateY(-50%)",
         opacity: dimmed ? 0.35 : 1,
-        transition: reduceMotion ? undefined : "opacity 250ms ease-out",
-        pointerEvents: reduceMotion ? "auto" : rowPointerEvents,
+        transition: reduceMotion ? undefined : "opacity 250ms ease-out, transform 200ms ease-out",
+        pointerEvents: isFeaturePassive ? "none" : reduceMotion ? "auto" : pointerEventsValue,
         // Skips layout/paint work entirely for rows the browser doesn't
         // think are near the viewport — desktop-only concern is mobile
         // frame rate during fast scroll-throughs, so this is gated to
@@ -158,11 +206,40 @@ export function GitGraphCommitRow({
       {/* branch context label */}
       {n.branchName && (
         <motion.div
-          style={{ opacity: reduceMotion ? 0.45 : labelOpacity, y: reduceMotion ? 0 : rowY }}
-          className="text-[10px] sm:text-[11px] font-mono tracking-tight text-gray-400 select-none pb-0.5 pointer-events-none flex items-center gap-1"
+          style={{
+            opacity: reduceMotion ? 0.45 : labelOpacity,
+            y: reduceMotion ? 0 : rowY,
+            transformOrigin: "left center",
+          }}
+          animate={{
+            scale: branchFocused && !reduceMotion ? 1.06 : 1,
+            filter: branchFocused
+              ? `brightness(1.4) drop-shadow(0 0 6px ${n.color}77)`
+              : "brightness(1) drop-shadow(0 0 0px transparent)",
+          }}
+          // Same spring used for GitGraphNode's hover pop (stiffness 420 /
+          // damping 22) — this label brightening is the text-column half
+          // of the same "this is what's active" gesture the graph side
+          // already makes, so it should feel like the same hand doing it.
+          transition={
+            reduceMotion
+              ? { duration: 0.01 }
+              : { type: "spring", stiffness: 420, damping: 22, mass: 0.6 }
+          }
+          className="text-[10px] sm:text-[11px] font-mono tracking-tight select-none pb-0.5 pointer-events-none flex items-center gap-1"
         >
-          <span className="text-gray-600 font-bold font-sans">$</span>
-          <span className="truncate">on {n.branchName}</span>
+          <span
+            className="font-bold font-sans transition-colors duration-200"
+            style={{ color: branchFocused ? n.color : "#4b5563" }}
+          >
+            $
+          </span>
+          <span
+            className="truncate transition-colors duration-200"
+            style={{ color: branchFocused ? n.color : "#9ca3af" }}
+          >
+            on {n.branchName}
+          </span>
         </motion.div>
       )}
 
@@ -249,6 +326,18 @@ export function GitGraphCommitRow({
           >
             {content}
           </motion.a>
+        ) : isFeaturePassive ? (
+          // Plain read-only row — no onClick/onEnter/onLeave, no button
+          // semantics, no focus ring. `id` is kept: GitGraphLegend's
+          // "jump to project" nav and GlobalSearch results both still
+          // target a specific commit hash to scrollIntoView + pulse-
+          // highlight (via `isHighlighted`, driven by GitGraph's
+          // `highlighted` state) — that's a locate-and-glance affordance,
+          // independent of the click-to-open behavior this row no longer
+          // has, so it stays working unchanged.
+          <motion.div id={`commit-${n.hash}`} style={sharedStyle} className={sharedClassName}>
+            {content}
+          </motion.div>
         ) : (
           <motion.button
             id={`commit-${n.hash}`}
@@ -267,6 +356,6 @@ export function GitGraphCommitRow({
           </motion.button>
         );
       })()}
-    </motion.li>
+    </li>
   );
 }

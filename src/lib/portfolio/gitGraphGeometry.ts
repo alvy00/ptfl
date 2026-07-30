@@ -109,11 +109,14 @@ export function buildGeometry(layout: Layout) {
   // COMMIT_STAGGER was 0.06 — too small to read as a deliberate cascade,
   // especially once several rows cross the viewport threshold in the same
   // scroll tick (see GitGraphCommitRow's lowered `amount` for the other
-  // half of this fix). 0.09 is the smallest step that still reads as
+  // half of this fix). 0.09 was the smallest step that still read as
   // "terminal log lines landing one after another" without feeling
-  // sluggish to wait through.
-  const COMMIT_STAGGER = 0.09;
-  const BRANCH_STAGGER = 0.15;
+  // sluggish — trimmed slightly further to 0.07/0.12 as part of a modest
+  // "a little faster" pass across the whole reveal (paired with
+  // nodeRevealWindow's wider pad above, and GitGraph.tsx's earlier scroll
+  // trigger + snappier progress spring).
+  const COMMIT_STAGGER = 0.07;
+  const BRANCH_STAGGER = 0.12;
 
   const allNodes: NodeMeta[] = [
     ...mainCommits.map((c, i) => ({
@@ -193,7 +196,7 @@ export function glowStops(hex: string): string[] {
  *  reverses back to hidden on scroll-up exactly in step with its branch's
  *  pathLength retracting, instead of staying stuck fully opaque with no
  *  line connecting it (the bug this replaces). */
-export function nodeRevealWindow(row: number, pad = 0.4): [number, number] {
+export function nodeRevealWindow(row: number, pad = 0.5): [number, number] {
   const start = (row - pad) / (TOTAL_ROWS - 1);
   const end = row / (TOTAL_ROWS - 1);
   return [Math.max(0, start), Math.min(1, end)];
