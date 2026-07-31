@@ -47,9 +47,11 @@ export function GlobalSearch() {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"idle" | "thinking" | "cooldown">("idle");
   const [result, setResult] = useState<ResultState | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
   const [placeholderIdx, setPlaceholderIdx] = useState(0);
   const [placeholderPaused, setPlaceholderPaused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const requestIdRef = useRef(0);
   const prefersReducedMotion = useReducedMotion();
 
@@ -79,19 +81,55 @@ export function GlobalSearch() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // The results panel is now a floating dropdown (see the JSX below) that
+  // overlays whatever's underneath it — GitGraph, most of the time, since
+  // the search bar itself lives inside a `position: sticky` wrapper
+  // (index.tsx) pinned above it. Previously the results rendered in
+  // normal flow *inside* that sticky wrapper, so every search grew the
+  // pinned area taller and permanently covered/blocked clicks on
+  // whatever of GitGraph happened to be scrolled underneath it — this is
+  // Floating instead of growing solves the "always covering something"
+  // half of that; this listener solves the other half — a floating
+  // dropdown still needs to get out of the way once you've moved on.
+  // This only flips isOpen, never discards `result` — clicking outside
+  // or picking a commit shouldn't cost a fresh API call if the person
+  // comes back to the same search (see reopenIfCached below).
+  useEffect(() => {
+    if (!isOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [isOpen]);
+
   const disabled = status !== "idle";
 
   function clear() {
     setQuery("");
     setResult(null);
+    setIsOpen(false);
     requestIdRef.current++; // invalidate any in-flight request so it can't repopulate result after this
     setStatus("idle");
     inputRef.current?.focus();
   }
 
+  // Reopens cached results without re-querying — clicking a commit or
+  // clicking outside only hides the dropdown (see isOpen below), it never
+  // discards `result`, so refocusing the input after either should bring
+  // the same answer/matches straight back instead of forcing a fresh API
+  // call for data that's already sitting in state.
+  function reopenIfCached() {
+    if (result) setIsOpen(true);
+  }
+
   function onInputKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Escape") {
-      if (query || result) {
+      if (isOpen) {
+        setIsOpen(false);
+      } else if (query) {
         clear();
       } else {
         inputRef.current?.blur();
@@ -102,6 +140,7 @@ export function GlobalSearch() {
   async function runQuery(q: string) {
     const requestId = ++requestIdRef.current;
     setStatus("thinking");
+    setIsOpen(true);
 
     // Matches are computed locally and instantly — show them right away
     // instead of making the user wait on the network call just to see a
@@ -187,7 +226,10 @@ export function GlobalSearch() {
   const nearLimit = query.length >= MAX_QUERY_LENGTH - 20;
 
   return (
-    <div className="pt-3 sm:pt-4 mb-8 sm:mb-12 w-full max-w-4xl mx-auto px-4 sm:px-0">
+    <div
+      ref={rootRef}
+      className="relative pt-3 sm:pt-4 mb-8 sm:mb-12 w-full max-w-4xl mx-auto px-4 sm:px-0"
+    >
       <style dangerouslySetInnerHTML={{ __html: dynamicStyles }} />
 
       <div className="mb-2 flex items-center justify-between">
@@ -223,7 +265,10 @@ export function GlobalSearch() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onInputKeyDown}
-            onFocus={() => setPlaceholderPaused(true)}
+            onFocus={() => {
+              setPlaceholderPaused(true);
+              reopenIfCached();
+            }}
             onBlur={() => setPlaceholderPaused(false)}
             disabled={disabled}
             maxLength={MAX_QUERY_LENGTH}
@@ -287,16 +332,25 @@ export function GlobalSearch() {
       </form>
 
       <AnimatePresence initial={false}>
-        {result && (
+        {isOpen && result && (
           <motion.div
-            initial={{ opacity: 0, height: 0, y: -4 }}
-            animate={{ opacity: 1, height: "auto", y: 0 }}
-            exit={{ opacity: 0, height: 0, y: -4 }}
-            transition={{ type: "spring", duration: 0.4, bounce: 0.1 }}
-            className="mt-3 sm:mt-4 overflow-hidden rounded-md border backdrop-blur-md"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            // Absolute, not normal flow: this used to sit inline below the
+            // form and grow the sticky search bar's own height on every
+            // search — since the bar is `position: sticky` (index.tsx),
+            // that meant the pinned area got taller and permanently
+            // covered whatever of GitGraph was scrolled underneath it,
+            // blocking clicks on commit/bugfix cards. Floating it here
+            // keeps the sticky bar's own height fixed to just the input
+            // row, so the dropdown covers content only while it's open
+            // (and only until the click-outside handler above closes it).
+            className="absolute left-4 right-4 sm:left-0 sm:right-0 top-full mt-3 sm:mt-4 max-h-[70vh] overflow-y-auto rounded-md border backdrop-blur-md shadow-2xl shadow-black/50"
             style={{
               borderColor: `${resultColor}15`,
-              background: "rgba(0,0,0,0.4)",
+              background: "rgba(8,9,12,0.97)",
             }}
           >
             <div
@@ -372,7 +426,10 @@ export function GlobalSearch() {
                     >
                       <button
                         type="button"
-                        onClick={() => highlightCommit(m.hash)}
+                        onClick={() => {
+                          highlightCommit(m.hash);
+                          setIsOpen(false);
+                        }}
                         aria-label={`Jump to commit ${m.hash} on ${m.branch}: ${m.message}`}
                         className="group flex flex-col sm:flex-row w-full items-stretch sm:items-start gap-1 sm:gap-4 rounded px-2 py-2 text-left transition-colors duration-150 hover:bg-white/5 border border-transparent hover:border-white/5 sm:border-none"
                       >
