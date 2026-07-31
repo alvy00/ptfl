@@ -1,7 +1,7 @@
 /* eslint-disable prettier/prettier */
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { getAIResponse } from "@/lib/portfolio/ask-project.mock";
+import { getAIResponse } from "@/lib/portfolio/ask-project";
 import type { ProjectKey } from "@/data/portfolio/projects";
 
 type Props = {
@@ -27,8 +27,14 @@ export function AskProject({ projectKey, accent }: Props) {
     try {
       const res = await getAIResponse(projectKey, q);
       setAnswer(res);
-    } catch {
-      setAnswer("[error] request failed. try again.");
+    } catch (err) {
+      // Was a flat "[error] request failed. try again." regardless of
+      // cause — now that getAIResponse can throw a real message (rate
+      // limit, validation, etc. — see src/lib/portfolio/ask-project.ts),
+      // surface it instead of masking every failure identically.
+      setAnswer(
+        err instanceof Error ? `[error] ${err.message}` : "[error] request failed. try again.",
+      );
     } finally {
       setStatus("cooldown");
       setTimeout(() => setStatus("idle"), COOLDOWN_MS);

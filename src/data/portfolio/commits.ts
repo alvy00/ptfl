@@ -44,16 +44,6 @@ export const auctasyncCommitContent: CommitContent[] = [
       "feat(auctasync): integrate SSLCommerz checkout with coupon support and Chart.js auction analytics",
   },
   {
-    hash: "b5q6r7s",
-    message:
-      "feat(auctasync): polish UI with Radix/shadcn primitives and Framer Motion/GSAP animations",
-  },
-  {
-    hash: "b8t9u0v",
-    message:
-      "feat(auctasync): harden decoupled architecture — isolate auction API/server-actions from the WebSocket broadcast service for independent scaling",
-  },
-  {
     hash: "b0l1m2n",
     message:
       "feat(auctasync): milestone — real-time bidding, listings, payments, and live analytics shipped to production",
@@ -76,11 +66,6 @@ export const assetverseCommitContent: CommitContent[] = [
     hash: "d7h8i9j",
     message:
       "feat(assetverse): implement full asset lifecycle (inventory → assignment → return) + Stripe-billed subscriptions",
-  },
-  {
-    hash: "d0k1l2m",
-    message:
-      "feat(assetverse): adopt TanStack Query for caching, request deduplication, and background revalidation across the asset dashboard",
   },
   {
     hash: "d7k8l9m",
@@ -106,11 +91,6 @@ export const asynclangaiCommitContent: CommitContent[] = [
       "feat(asynclangai): implement live voice conversation engine with natural back-and-forth dialogue",
   },
   {
-    hash: "l7a8n9g",
-    message:
-      "feat(asynclangai): implement custom mock interviews via Gemini, offload scoring to a Redis/Bull queue",
-  },
-  {
     hash: "l0a1n2g",
     message:
       "feat(asynclangai): milestone — live voice practice with non-blocking AI feedback pipeline shipped",
@@ -134,11 +114,6 @@ export const careerpilotCommitContent: CommitContent[] = [
       "feat(careerpilot): implement live Vapi voice mock interviews with real-time conversational flow",
   },
   {
-    hash: "c2q3r4s",
-    message:
-      "feat(careerpilot): implement adaptive quiz engine — Gemini-generated quizzes per roadmap phase to validate understanding before advancing",
-  },
-  {
     hash: "c5t6u7v",
     message:
       "feat(careerpilot): implement AI-generated interview/assessment question bank, goal-specific across technical, academic, and practical tracks",
@@ -156,11 +131,12 @@ export const careerpilotCommitContent: CommitContent[] = [
   },
 ];
 
+// Single commit, not reproduce+resolve — both used to open the exact same
+// bugfix detail modal (see bugfixes.ts), so the "reproduce" commit was
+// pure visual duplication with no information the modal didn't already
+// carry. One commit per bugfix branch now; the modal still tells the full
+// problem -> root cause -> fix story regardless.
 export const auctasyncBugfixCommitContent: CommitContent[] = [
-  {
-    hash: "ra1c2d3",
-    message: "fix(auctasync): reproduce and isolate race condition in concurrent bid updates",
-  },
   {
     hash: "ra4e5f6",
     message: "fix(auctasync): resolve race condition with server-authoritative bid ordering",
@@ -169,21 +145,12 @@ export const auctasyncBugfixCommitContent: CommitContent[] = [
 
 export const careerpilotBugfixCommitContent: CommitContent[] = [
   {
-    hash: "sc1d2e3",
-    message: "fix(careerpilot): reproduce and isolate session-state bug in voice interview flow",
-  },
-  {
     hash: "sc4f5g6",
     message: "fix(careerpilot): resolve session-state bug with corrected state management",
   },
 ];
 
 export const careerpilotDuplicateSubmitBugfixCommitContent: CommitContent[] = [
-  {
-    hash: "cd1x2y3",
-    message:
-      "fix(careerpilot): reproduce and isolate duplicate roadmap generation on rapid re-submit",
-  },
   {
     hash: "cd4z5a6",
     message:

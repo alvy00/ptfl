@@ -200,24 +200,21 @@ export function GitGraph() {
 
   const openCommit = (n: NodeMeta, evt?: MouseEvent) => {
     if (n.isBugfix && n.bugfixKey !== undefined) {
-      if (n.bugfixCommitIndex === 1) {
-        setSelection({
-          kind: "bugfix",
-          hash: n.hash,
-          message: n.message,
-          bugfixKey: n.bugfixKey,
-        });
-      } else {
-        const rect = (evt?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect();
-        setSelection({
-          kind: "bugfix-first",
-          hash: n.hash,
-          message: n.message,
-          color: n.color,
-          anchorX: rect ? rect.left + rect.width / 2 : window.innerWidth / 2,
-          anchorY: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
-        });
-      }
+      // Used to be `if (n.bugfixCommitIndex === 1)` — a check for "is this
+      // the resolve commit," back when each bugfix branch had two commits
+      // (reproduce + resolve) and only the second opened the real modal,
+      // with the first opening a lighter "bugfix-first" anchored popover
+      // instead. Every bugfix branch is now a single (resolve-only)
+      // commit, so that index is always 0 — the check silently stopped
+      // matching, and clicking a bugfix commit fell through to the teaser
+      // popover instead of the actual problem/fix modal. There's only one
+      // commit per bugfix now, so it should always open the full story.
+      setSelection({
+        kind: "bugfix",
+        hash: n.hash,
+        message: n.message,
+        bugfixKey: n.bugfixKey,
+      });
       return;
     }
     if (n.isMain) {

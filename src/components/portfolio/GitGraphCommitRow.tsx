@@ -289,13 +289,34 @@ export function GitGraphCommitRow({
               </span>
             </div>
             <span
-              className="leading-snug break-words text-[13px] sm:text-[14.5px] line-clamp-2 sm:line-clamp-none flex-1 min-w-0"
+              // line-clamp-2 (previously applied below the sm: breakpoint)
+              // removed entirely — capping message text to 2 lines while
+              // the row's available width was also tight is exactly what
+              // was forcing text to try to fit in too little space and
+              // spill past the row's own right edge instead of wrapping.
+              // Letting it wrap to as many lines as it actually needs
+              // means it uses vertical space (which this graph has
+              // plenty of, being one long scroll) instead of running out
+              // of horizontal room.
+              //
+              // break-words alone (overflow-wrap: break-word) only
+              // creates a break opportunity when the layout has already
+              // decided there's nowhere else to wrap — [overflow-wrap:anywhere]
+              // is stronger: it lets the browser break at any point,
+              // including mid-word, as a last resort. Combined with
+              // wordBreak below, this is a hard guarantee against
+              // horizontal overflow regardless of any subtle flex/
+              // min-width sizing edge case upstream, rather than relying
+              // on the row's available width always being calculated
+              // exactly right.
+              className="leading-snug break-words [overflow-wrap:anywhere] text-[13px] sm:text-[14.5px] flex-1 min-w-0"
               style={{
                 color: n.textColor,
                 fontWeight: n.isMain || n.isHead || isMilestone ? 500 : 400,
                 fontStyle: n.isBugfix ? "italic" : "normal",
                 opacity: n.isHead ? 0.9 : n.isMain ? 0.9 : 0.85,
                 textShadow: isHovered ? `0 0 12px ${n.color}66` : "none",
+                wordBreak: "break-word",
                 // HEAD's copy is the actual call-to-action, not a label —
                 // an underline on hover is the one extra cue that turns
                 // "text that happens to be clickable" into "this is a

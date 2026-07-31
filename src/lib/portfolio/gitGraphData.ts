@@ -13,12 +13,20 @@ import {
 import type { BranchDef, BugfixDef, Commit, Layout, MainCommit, Tier } from "./gitGraphTypes";
 
 export const LAYOUTS: Record<Tier, Layout> = {
-  // rowH bumped +6px per tier (topPad +2-4px to match) for more breathing
-  // room between commit lines/blocks. TOTAL_ROWS and all row-plan math are
-  // untouched — yOf() is a pure function of rowH, so this scales the whole
-  // graph's vertical rhythm without touching topology.
-  xs: { rowH: 72, topPad: 46, mainX: 12, laneW: 17, nodeScale: 0.8 }, // <400px
-  sm: { rowH: 78, topPad: 50, mainX: 16, laneW: 23, nodeScale: 0.88 }, // 400-639px
+  // rowH is the spacing between row centers, not a box height — each
+  // row's <li> is absolutely positioned and sized to its own content, so
+  // it was already free to grow taller than a "slot." The actual risk
+  // is two adjacent rows both growing tall enough to visually bleed into
+  // each other, since their center-points stay exactly rowH apart no
+  // matter how tall either one renders. xs/sm bumped up (topPad keeping
+  // the same ~0.64 ratio to rowH the other tiers already use) — now that
+  // line-clamp-2 no longer caps message length there, wrapped 3-4 line
+  // messages at the tighter xs/sm column widths need real headroom, not
+  // the same spacing that was originally sized around a 2-line cap.
+  // md/lg untouched — text there was already unclamped and wrapping
+  // freely before this pass, so this isn't a new risk at those tiers.
+  xs: { rowH: 108, topPad: 69, mainX: 8, laneW: 15, nodeScale: 0.72 }, // <400px
+  sm: { rowH: 98, topPad: 63, mainX: 12, laneW: 20, nodeScale: 0.82 }, // 400-639px
   md: { rowH: 86, topPad: 54, mainX: 20, laneW: 30, nodeScale: 0.96 }, // 640-1023px
   lg: { rowH: 90, topPad: 58, mainX: 24, laneW: 34, nodeScale: 1 }, // 1024px+
 };

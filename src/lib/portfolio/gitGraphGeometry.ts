@@ -5,6 +5,7 @@ import {
   bugfixColorForParentLane,
   FEATURE_OFFSET_RATIO,
   hexToRgbTriplet,
+  LAYOUTS,
   mainCommits,
   PALETTE,
   TOTAL_LANES,
@@ -24,12 +25,38 @@ export function featureTrackX(layout: Layout): number {
   return layout.mainX + 2.25 * layout.laneW;
 }
 
+// The lane fraction BUGFIX_X draws at — the single rightmost point
+// anything in the graph ever renders to. Named and shared so graphW
+// (which needs to reserve exactly this much width, plus a little
+// clearance) and BUGFIX_X itself can't silently drift apart the way two
+// separately-hand-typed "3.25"s eventually would.
+const BUGFIX_LANE = 3.25;
+
 /** All pixel geometry derived from a Layout — rebuilt only when the tier changes. */
 export function buildGeometry(layout: Layout) {
   const { rowH, topPad, mainX, laneW } = layout;
   const yOf = (row: number) => topPad + row * rowH;
   const laneX = (lane: number) => mainX + lane * laneW;
-  const graphW = mainX + laneW * TOTAL_LANES;
+  // Branched by tier via referential comparison against LAYOUTS' own
+  // stable object literals (GitGraph.tsx always passes `LAYOUTS[tier]`
+  // straight through, so this is a reliable identity check, not a
+  // heuristic) — desktop (md/lg) keeps the exact original formula
+  // unchanged, reserving width for all TOTAL_LANES regardless of whether
+  // anything draws there. That reservation was never the actual problem;
+  // desktop has room to spare either way. xs/sm get the tightened
+  // formula instead, tracking the real rightmost drawn point (BUGFIX_X)
+  // plus a small clearance — on a <400px viewport, the unused reserved
+  // width was coming directly out of the commit text column's budget,
+  // pushing message text past the right edge.
+  const isDesktopTier = layout === LAYOUTS.md || layout === LAYOUTS.lg;
+  // Clearance past BUGFIX_X bumped 0.75 -> 1.25 lane-widths — the graph's
+  // drawn content (spine/branches/nodes) was reading as too close to the
+  // text column. Paired with mainX shifting left on xs/sm (gitGraphData.ts)
+  // so the drawn content moves toward the screen edge rather than the
+  // extra clearance simply eating further into text's own width.
+  const graphW = isDesktopTier
+    ? mainX + laneW * TOTAL_LANES
+    : mainX + laneW * (BUGFIX_LANE + 1.25);
   const height = topPad * 2 + (TOTAL_ROWS - 1) * rowH;
   const featureOffset = rowH * FEATURE_OFFSET_RATIO;
   const bugfixOffset = rowH * BUGFIX_OFFSET_RATIO;
@@ -45,7 +72,7 @@ export function buildGeometry(layout: Layout) {
   // "which lane" from "how far" fixes that: FEATURE_X/BUGFIX_X below are
   // the only two rail distances that ever get drawn.
   const FEATURE_X = featureTrackX(layout);
-  const BUGFIX_X = laneX(3.25);
+  const BUGFIX_X = laneX(BUGFIX_LANE);
 
   const branches = BRANCH_DEFS.map((b) => ({
     ...b,
