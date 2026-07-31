@@ -64,7 +64,7 @@ export function GitGraphParticleField({
   isCoarsePointer,
   onImpact,
 }: {
-  containerRef: RefObject<HTMLDivElement>;
+  containerRef: RefObject<HTMLDivElement | null>;
   branches: GeometryBranch[];
   layout: Layout;
   graphW: number;

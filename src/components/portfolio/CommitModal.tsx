@@ -7,11 +7,7 @@ import {
   type PanInfo,
 } from "framer-motion";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import {
-  projects,
-  type Project,
-  type ProjectKey,
-} from "@/data/portfolio/projects";
+import { projects, type Project, type ProjectKey } from "@/data/portfolio/projects";
 import { bugfixes, type BugfixKey } from "@/data/portfolio/bugfixes";
 import { AskProject } from "./AskProject";
 import { GlassSpecular, useGlassTilt } from "./useGlassTilt";
@@ -111,7 +107,18 @@ function useFocusTrap<T extends HTMLElement>(active: boolean) {
 
     const raf = requestAnimationFrame(() => {
       const focusable = getFocusable();
-      (focusable[0] ?? containerRef.current)?.focus();
+      // preventScroll matters here specifically: getFocusable() returns
+      // elements in DOM order, and in FeatureModal that means the first
+      // focusable element is usually the "Live Demo" link — which sits
+      // well below the fold, after the description/features/stack. Without
+      // preventScroll, focus()'s default browser behavior scrolls the
+      // nearest scrollable ancestor (the modal's own overflow-y-auto
+      // content div) to bring that link into view, so every modal opened
+      // already scrolled down instead of at the top. This keeps the
+      // accessibility behavior (focus still moves correctly for keyboard/
+      // screen-reader users) without also relocating the visible scroll
+      // position as a side effect.
+      (focusable[0] ?? containerRef.current)?.focus({ preventScroll: true });
     });
 
     const onKeyDown = (e: KeyboardEvent) => {
@@ -134,7 +141,13 @@ function useFocusTrap<T extends HTMLElement>(active: boolean) {
     return () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("keydown", onKeyDown);
-      previouslyFocused.current?.focus?.();
+      // isConnected guards against restoring focus to an element that's
+      // since been removed from the DOM (e.g. the commit list re-rendered
+      // while this modal was open) — calling .focus() on a detached node
+      // is a silent no-op in most browsers but not guaranteed everywhere,
+      // so check first rather than relying on that being universally safe.
+      const prev = previouslyFocused.current;
+      if (prev?.isConnected) prev.focus();
     };
   }, [active, getFocusable]);
 
@@ -289,6 +302,7 @@ function BugfixModal({
   const bug = bugfixes[selection.bugfixKey];
   const accent = bug.accent;
   const titleId = useId();
+  const descId = useId();
   const containerRef = useFocusTrap<HTMLDivElement>(true);
   const { isMobile, reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
     useModalMotion(onClose);
@@ -320,6 +334,7 @@ function BugfixModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={descId}
         className="relative w-full max-w-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col outline-none"
         initial={variants.initial}
         animate={variants.animate}
@@ -367,7 +382,7 @@ function BugfixModal({
             <h3 id={titleId} className="text-lg sm:text-xl font-semibold text-white leading-snug">
               {bug.title}
             </h3>
-            <p className="mt-2 text-[13px] sm:text-[14px] text-gray-500 break-words">
+            <p className="mt-2 text-[13px] sm:text-[14px] text-gray-500 break-words" id={descId}>
               {selection.message}
             </p>
 
@@ -445,6 +460,7 @@ function FeatureModal({
   const project: Project = projects[selection.projectKey];
   const accent = project.accent;
   const titleId = useId();
+  const descId = useId();
   const containerRef = useFocusTrap<HTMLDivElement>(true);
   const { isMobile, reducedMotion, dragControls, dragEnabled, variants, transition, dragProps } =
     useModalMotion(onClose);
@@ -476,6 +492,7 @@ function FeatureModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={descId}
         className="relative w-full max-w-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col outline-none"
         initial={variants.initial}
         animate={variants.animate}
@@ -500,7 +517,10 @@ function FeatureModal({
                 {project.timeframe.label}
               </p>
             )}
-            <p className="mt-3 text-[14px] sm:text-[15.5px] leading-relaxed text-gray-300 font-sans break-words">
+            <p
+              id={descId}
+              className="mt-3 text-[14px] sm:text-[15.5px] leading-relaxed text-gray-300 font-sans break-words"
+            >
               {project.description}
             </p>
 
@@ -647,7 +667,12 @@ function SimplePopover({
       return;
     }
     const POPOVER_WIDTH = 370;
-    const POPOVER_HEIGHT_ESTIMATE = 140;
+    // Used only as a fallback for the one edge case where containerRef
+    // somehow isn't attached yet when this runs (shouldn't happen in
+    // practice — refs attach during commit, before layout effects fire —
+    // but getBoundingClientRect() on a null ref would throw, so this is
+    // the safety net, not the primary source of truth anymore).
+    const FALLBACK_HEIGHT_ESTIMATE = 140;
     const margin = 16;
 
     let left = anchorX + 24;
@@ -656,9 +681,21 @@ function SimplePopover({
     }
     left = Math.min(Math.max(margin, left), window.innerWidth - POPOVER_WIDTH - margin);
 
+    // Real measured height, not a guess — by this point containerRef is
+    // already mounted with its actual content (hash + commit message),
+    // so its rendered height reflects real text length/wrapping instead
+    // of assuming every commit message fits inside one fixed estimate.
+    // This matters because a longer commit message wrapping to 2-3 lines
+    // could exceed a fixed guess and clip off the bottom edge — measuring
+    // means the vertical clamp below is always accurate to what's
+    // actually being placed, regardless of message length.
+    const measuredHeight = containerRef.current?.getBoundingClientRect().height;
+    const popoverHeight =
+      measuredHeight && measuredHeight > 0 ? measuredHeight : FALLBACK_HEIGHT_ESTIMATE;
+
     let top = anchorY - 24;
-    if (top + POPOVER_HEIGHT_ESTIMATE > window.innerHeight - margin) {
-      top = window.innerHeight - POPOVER_HEIGHT_ESTIMATE - margin; // push up off the bottom edge
+    if (top + popoverHeight > window.innerHeight - margin) {
+      top = window.innerHeight - popoverHeight - margin; // push up off the bottom edge
     }
     top = Math.max(margin, top);
 

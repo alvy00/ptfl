@@ -29,7 +29,7 @@ const SPECULAR_SPRING = { stiffness: 220, damping: 24 } as const;
  *    a decorative cursor-tracking effect
  */
 export function useGlassTilt<T extends HTMLElement>(
-  containerRef: RefObject<T>,
+  containerRef: RefObject<T | null>,
   { disabled }: { disabled: boolean },
 ) {
   const [settled, setSettled] = useState(false);
