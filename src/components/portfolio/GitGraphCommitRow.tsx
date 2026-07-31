@@ -50,10 +50,10 @@ export function GitGraphCommitRow({
 }) {
   const isMilestone = n.message.toLowerCase().includes("milestone");
   const pointerCoarse = usePointerCoarse();
-  // Pivot: a plain feature-branch commit (not main, not a bugfix, not
-  // HEAD) is no longer its own clickable thing. Every one of them used to
-  // open the exact same project modal regardless of which specific commit
-  // was clicked — a "click-dead" affordance (individual hover rings and
+  // Pivot: a plain feature-branch commit (not main, not HEAD) is no
+  // longer its own clickable thing. Every one of them used to open the
+  // exact same project modal regardless of which specific commit was
+  // clicked — a "click-dead" affordance (individual hover rings and
   // button semantics on 20 different rows, all leading to one identical
   // destination). The project's whole card (GitGraphActiveBorder's box in
   // GitGraph.tsx) is the click target now; these rows go back to being
@@ -62,7 +62,14 @@ export function GitGraphCommitRow({
   // than wired to a no-op, so there's no dead interactive surface left
   // sitting on top of the card intercepting its hover/click (see the
   // pointerEvents override on the outer <li> below).
-  const isFeaturePassive = !n.isMain && !n.isBugfix && !n.isHead;
+  //
+  // Bugfix commits get the exact same treatment for the exact same
+  // reason: every commit in a bugfix branch used to open the identical
+  // bugfix detail modal on click, so 2 separate clickable rows were 2
+  // identical destinations. GitGraphBugfixBox now owns the whole
+  // reproduce+resolve span as one click target (mirroring
+  // GitGraphFeatureCard), so these rows are passive too.
+  const isPassiveRow = !n.isMain && !n.isHead;
   // HEAD is the terminus of the whole graph — the peak-end moment, where a
   // visitor who's scrolled the entire commit history lands right as the
   // "open to work" copy appears. Treating it like every other trunk commit
@@ -185,7 +192,7 @@ export function GitGraphCommitRow({
         transform: branchFocused ? "translateY(calc(-50% - 6px))" : "translateY(-50%)",
         opacity: dimmed ? 0.35 : 1,
         transition: reduceMotion ? undefined : "opacity 250ms ease-out, transform 200ms ease-out",
-        pointerEvents: isFeaturePassive ? "none" : reduceMotion ? "auto" : pointerEventsValue,
+        pointerEvents: isPassiveRow ? "none" : reduceMotion ? "auto" : pointerEventsValue,
         // Skips layout/paint work entirely for rows the browser doesn't
         // think are near the viewport — desktop-only concern is mobile
         // frame rate during fast scroll-throughs, so this is gated to
@@ -347,7 +354,7 @@ export function GitGraphCommitRow({
           >
             {content}
           </motion.a>
-        ) : isFeaturePassive ? (
+        ) : isPassiveRow ? (
           // Plain read-only row — no onClick/onEnter/onLeave, no button
           // semantics, no focus ring. `id` is kept: GitGraphLegend's
           // "jump to project" nav and GlobalSearch results both still

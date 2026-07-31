@@ -54,9 +54,7 @@ export function buildGeometry(layout: Layout) {
   // text column. Paired with mainX shifting left on xs/sm (gitGraphData.ts)
   // so the drawn content moves toward the screen edge rather than the
   // extra clearance simply eating further into text's own width.
-  const graphW = isDesktopTier
-    ? mainX + laneW * TOTAL_LANES
-    : mainX + laneW * (BUGFIX_LANE + 1.25);
+  const graphW = isDesktopTier ? mainX + laneW * TOTAL_LANES : mainX + laneW * (BUGFIX_LANE + 1.25);
   const height = topPad * 2 + (TOTAL_ROWS - 1) * rowH;
   const featureOffset = rowH * FEATURE_OFFSET_RATIO;
   const bugfixOffset = rowH * BUGFIX_OFFSET_RATIO;
@@ -108,28 +106,68 @@ export function buildGeometry(layout: Layout) {
   // is a true flat column parallel to the main spine.
   const ENTRY_LEN = rowH * 0.35;
 
+  // Curve length has three competing constraints:
+  //
+  // 1. It must be long enough (vertically) to cover however far the curve
+  //    also has to travel HORIZONTALLY (dx = the trunk-to-lane distance).
+  //    ENTRY_LEN alone is a fixed vertical reach with no relationship to
+  //    dx — when dx is bigger than that reach, the Bezier has to cover
+  //    more sideways distance than it has vertical room for, so instead
+  //    of a smooth diagonal hook it reads as a sharp elbow/box.
+  // 2. It must never exceed half the branch's actual vertical span
+  //    (sourceY..mergeY), or the entry curve's end and the exit curve's
+  //    start cross each other into a self-intersecting spike.
+  // 3. It must never extend PAST the branch's actual first/last commit
+  //    row (firstY/lastY) — the curve's endpoint and the commit node's
+  //    position are two completely independent calculations (this
+  //    formula vs. yOf(commit.row)), so nothing before this guaranteed
+  //    they'd coincide. When constraint #1 pushed the curve longer than
+  //    the gap to the first commit, the curve overshot past where the
+  //    node actually sits — the node ended up floating beside the path
+  //    instead of sitting on it. Since the straight "L" run afterward is
+  //    at a constant x the whole way, clamping the curve to stop AT OR
+  //    BEFORE firstY/lastY is sufficient to guarantee every node
+  //    (including the first and last) lands exactly on the path — no
+  //    separate alignment logic needed, just not overshooting past them.
+  const curveLenFor = (
+    sourceY: number,
+    mergeY: number,
+    dx: number,
+    firstY: number,
+    lastY: number,
+  ) => {
+    const desired = Math.max(ENTRY_LEN, Math.abs(dx) * 0.6);
+    return Math.min(desired, (mergeY - sourceY) / 2, firstY - sourceY, mergeY - lastY);
+  };
+
   const branchPath = (b: (typeof branches)[number]): string => {
     const bx = FEATURE_X;
-    const entryEndY = b.sourceY + ENTRY_LEN;
-    const exitStartY = b.mergeY - ENTRY_LEN;
+    const firstY = yOf(b.commits[0].row);
+    const lastY = yOf(b.commits[b.commits.length - 1].row);
+    const len = curveLenFor(b.sourceY, b.mergeY, bx - mainX, firstY, lastY);
+    const entryEndY = b.sourceY + len;
+    const exitStartY = b.mergeY - len;
     return [
       `M ${mainX} ${b.sourceY}`,
-      `C ${mainX} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${entryEndY}`,
+      `C ${mainX} ${b.sourceY + len * 0.5}, ${bx} ${b.sourceY + len * 0.5}, ${bx} ${entryEndY}`,
       `L ${bx} ${exitStartY}`,
-      `C ${bx} ${b.mergeY - ENTRY_LEN * 0.5}, ${mainX} ${b.mergeY - ENTRY_LEN * 0.5}, ${mainX} ${b.mergeY}`,
+      `C ${bx} ${b.mergeY - len * 0.5}, ${mainX} ${b.mergeY - len * 0.5}, ${mainX} ${b.mergeY}`,
     ].join(" ");
   };
 
   const bugfixPath = (b: (typeof bugfixBranches)[number]): string => {
     const px = FEATURE_X;
     const bx = BUGFIX_X;
-    const entryEndY = b.sourceY + ENTRY_LEN;
-    const exitStartY = b.mergeY - ENTRY_LEN;
+    const firstY = yOf(b.commits[0].row);
+    const lastY = yOf(b.commits[b.commits.length - 1].row);
+    const len = curveLenFor(b.sourceY, b.mergeY, bx - px, firstY, lastY);
+    const entryEndY = b.sourceY + len;
+    const exitStartY = b.mergeY - len;
     return [
       `M ${px} ${b.sourceY}`,
-      `C ${px} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${b.sourceY + ENTRY_LEN * 0.5}, ${bx} ${entryEndY}`,
+      `C ${px} ${b.sourceY + len * 0.5}, ${bx} ${b.sourceY + len * 0.5}, ${bx} ${entryEndY}`,
       `L ${bx} ${exitStartY}`,
-      `C ${bx} ${b.mergeY - ENTRY_LEN * 0.5}, ${px} ${b.mergeY - ENTRY_LEN * 0.5}, ${px} ${b.mergeY}`,
+      `C ${bx} ${b.mergeY - len * 0.5}, ${px} ${b.mergeY - len * 0.5}, ${px} ${b.mergeY}`,
     ].join(" ");
   };
 

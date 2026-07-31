@@ -131,12 +131,15 @@ export const careerpilotCommitContent: CommitContent[] = [
   },
 ];
 
-// Single commit, not reproduce+resolve — both used to open the exact same
-// bugfix detail modal (see bugfixes.ts), so the "reproduce" commit was
-// pure visual duplication with no information the modal didn't already
-// carry. One commit per bugfix branch now; the modal still tells the full
-// problem -> root cause -> fix story regardless.
+// Two commits (reproduce + resolve), matching every other branch's shape.
+// The modal no longer opens from an individual commit row click — these
+// rows are passive display text now, and the whole bugfix box (see
+// GitGraphBugfixBox) is the single click target for both commits at once.
 export const auctasyncBugfixCommitContent: CommitContent[] = [
+  {
+    hash: "ra1c2d3",
+    message: "fix(auctasync): reproduce and isolate race condition in concurrent bid updates",
+  },
   {
     hash: "ra4e5f6",
     message: "fix(auctasync): resolve race condition with server-authoritative bid ordering",
@@ -145,12 +148,21 @@ export const auctasyncBugfixCommitContent: CommitContent[] = [
 
 export const careerpilotBugfixCommitContent: CommitContent[] = [
   {
+    hash: "sc1d2e3",
+    message: "fix(careerpilot): reproduce and isolate session-state bug in voice interview flow",
+  },
+  {
     hash: "sc4f5g6",
     message: "fix(careerpilot): resolve session-state bug with corrected state management",
   },
 ];
 
 export const careerpilotDuplicateSubmitBugfixCommitContent: CommitContent[] = [
+  {
+    hash: "cd1x2y3",
+    message:
+      "fix(careerpilot): reproduce and isolate duplicate roadmap generation on rapid re-submit",
+  },
   {
     hash: "cd4z5a6",
     message:

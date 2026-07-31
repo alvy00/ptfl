@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, useMemo, type MouseEvent } from "react";
 import { CommitModal, type CommitSelection } from "./CommitModal";
 import type { ProjectKey } from "@/data/portfolio/projects";
 import { projects } from "@/data/portfolio/projects";
+import { bugfixes } from "@/data/portfolio/bugfixes";
 import { GitGraphScrollProgress } from "./GitGraphScrollProgress";
 import { GitGraphAmbientGlow } from "./GitGraphAmbientGlow";
 import { GitGraphLegend } from "./GitGraphLegend";
@@ -199,24 +200,6 @@ export function GitGraph() {
   }, [reduceMotion]);
 
   const openCommit = (n: NodeMeta, evt?: MouseEvent) => {
-    if (n.isBugfix && n.bugfixKey !== undefined) {
-      // Used to be `if (n.bugfixCommitIndex === 1)` — a check for "is this
-      // the resolve commit," back when each bugfix branch had two commits
-      // (reproduce + resolve) and only the second opened the real modal,
-      // with the first opening a lighter "bugfix-first" anchored popover
-      // instead. Every bugfix branch is now a single (resolve-only)
-      // commit, so that index is always 0 — the check silently stopped
-      // matching, and clicking a bugfix commit fell through to the teaser
-      // popover instead of the actual problem/fix modal. There's only one
-      // commit per bugfix now, so it should always open the full story.
-      setSelection({
-        kind: "bugfix",
-        hash: n.hash,
-        message: n.message,
-        bugfixKey: n.bugfixKey,
-      });
-      return;
-    }
     if (n.isMain) {
       const rect = (evt?.currentTarget as HTMLElement | undefined)?.getBoundingClientRect();
       setSelection({
@@ -227,10 +210,12 @@ export function GitGraph() {
         anchorY: rect ? rect.top + rect.height / 2 : window.innerHeight / 2,
       });
     }
-    // No feature-commit branch here anymore: those rows are passive (see
-    // GitGraphCommitRow's isFeaturePassive) and never call onOpen. Opening
-    // a project is openProjectCard below, wired to the whole card instead
-    // of any individual commit.
+    // No feature-commit or bugfix-commit branch here anymore: those rows
+    // are passive (see GitGraphCommitRow's isPassiveRow) and never call
+    // onOpen. Opening a project is openProjectCard below, wired to the
+    // whole feature card; opening a bugfix is openBugfix, wired to the
+    // whole bugfix box — neither is ever triggered from an individual
+    // commit row anymore.
   };
 
   // Single entry point for opening a project's deep-dive — whatever UI
@@ -241,6 +226,22 @@ export function GitGraph() {
   // clicked despite always opening the same project modal underneath.
   const openProjectCard = (projectKey: ProjectKey) => {
     setSelection({ kind: "feature", projectKey });
+  };
+
+  // Bugfix equivalent of openProjectCard — one entry point for the whole
+  // box (see GitGraphBugfixBox), replacing what used to be 2 identical
+  // per-commit handlers (reproduce + resolve, both opening the same
+  // modal). The resolve commit (always last) is used as the canonical
+  // hash/message for the modal header, since it's the commit that
+  // actually represents "this is fixed," not the reproduce step.
+  const openBugfix = (b: (typeof bugfixBranches)[number]) => {
+    const resolveCommit = b.commits[b.commits.length - 1];
+    setSelection({
+      kind: "bugfix",
+      hash: resolveCommit.hash,
+      message: resolveCommit.message,
+      bugfixKey: b.bugfixKey,
+    });
   };
 
   const dimTransition = reduceMotion
@@ -477,10 +478,12 @@ export function GitGraph() {
             <GitGraphBugfixBox
               key={`border-${b.name}`}
               b={b}
+              title={bugfixes[b.bugfixKey].title}
               active={focusedBranch === b.branchGroup && focusedBugfixKey === b.bugfixKey}
               reduceMotion={reduceMotion}
               focusBranch={focusBranch}
               unfocusBranch={unfocusBranch}
+              onOpen={openBugfix}
             />
           ))}
         </div>
