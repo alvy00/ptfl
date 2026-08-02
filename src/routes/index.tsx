@@ -20,7 +20,7 @@ import { useState, useEffect, useLayoutEffect, useRef } from "react";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Alvy — Developer Portfolio" },
+      { title: "Alvy — Dev Portfolio" },
       {
         name: "description",
         content:

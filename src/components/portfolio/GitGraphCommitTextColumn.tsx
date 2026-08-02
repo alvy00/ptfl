@@ -14,6 +14,7 @@ import { GitGraphCommitRow } from "./GitGraphCommitRow";
 export function GitGraphCommitTextColumn({
   allNodes,
   graphW,
+  textColumnGapPx,
   hovered,
   highlighted,
   focusedBranch,
@@ -27,6 +28,7 @@ export function GitGraphCommitTextColumn({
 }: {
   allNodes: NodeMeta[];
   graphW: number;
+  textColumnGapPx: number;
   hovered: string | null;
   highlighted: string | null;
   focusedBranch: string | undefined;
@@ -41,7 +43,7 @@ export function GitGraphCommitTextColumn({
   return (
     <ul
       className="absolute inset-y-0 right-4 sm:right-10 pointer-events-none list-none m-0 p-0"
-      style={{ left: `calc(${graphW}px + 1.5rem)` }}
+      style={{ left: `calc(${graphW}px + ${textColumnGapPx}px)` }}
     >
       {allNodes.map((n) => (
         <GitGraphCommitRow

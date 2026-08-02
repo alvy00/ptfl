@@ -95,8 +95,17 @@ export function GitGraph() {
   const layout = LAYOUTS[tier];
 
   const geometry = useMemo(() => buildGeometry(layout), [layout]);
-  const { yOf, graphW, height, branches, bugfixBranches, branchPath, bugfixPath, allNodes } =
-    geometry;
+  const {
+    yOf,
+    graphW,
+    textColumnGapPx,
+    height,
+    branches,
+    bugfixBranches,
+    branchPath,
+    bugfixPath,
+    allNodes,
+  } = geometry;
 
   const nodeScale = layout.nodeScale;
 
@@ -447,7 +456,7 @@ export function GitGraph() {
           // aligned — this only shifts the shared right margin, not their
           // relative position to each other.
           className="absolute inset-y-0 right-4 sm:right-10 pointer-events-none"
-          style={{ left: `calc(${graphW}px + 1.5rem)` }}
+          style={{ left: `calc(${graphW}px + ${textColumnGapPx}px)` }}
         >
           {/* Rebalanced per latest markup: vertical stays tight against
               the commit range (just a small fixed clearance, not a
@@ -491,6 +500,7 @@ export function GitGraph() {
         <GitGraphCommitTextColumn
           allNodes={allNodes}
           graphW={graphW}
+          textColumnGapPx={textColumnGapPx}
           hovered={hovered}
           highlighted={highlighted}
           focusedBranch={focusedBranch}

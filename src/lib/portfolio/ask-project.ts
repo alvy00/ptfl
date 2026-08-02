@@ -36,10 +36,27 @@ function getClient(): GoogleGenAI {
   return client;
 }
 
-// Change this to whatever model your key actually has access to —
-// "gemini-2.5-flash" is a safe, broadly-available default (fast, cheap),
-// not a claim that it's the only or newest option.
-const MODEL = "gemini-3.6-flash";
+/**
+ * Fallback chain of free-tier Gemini models, tried in order on any
+ * failure (rate limit, transient error, model-specific outage). Ordered
+ * strongest-capability-first so quality only degrades when it has to.
+ *
+ * As of mid-2026, Google's free tier no longer includes any Pro model
+ * (Pro moved to paid-only in April 2026) — the free lineup is the Flash
+ * / Flash-Lite family. Kept a couple of generations deep on purpose:
+ * 3.x models are newer/cheaper on quota but occasionally get pulled from
+ * free access or hit region-specific hiccups, so 2.5 models stay in the
+ * chain as a safety net rather than being trusted alone.
+ *
+ * Re-check https://ai.google.dev/gemini-api/docs/pricing periodically —
+ * this list WILL go stale as Google reshuffles the free tier again.
+ */
+const MODEL_FALLBACK_CHAIN = [
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+] as const;
 
 const MAX_QUESTION_LENGTH = 500;
 
@@ -60,10 +77,34 @@ function buildProjectContext(projectKey: ProjectKey): string {
   ].join("\n\n");
 }
 
+function isRateLimitError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes("429") || /rate.?limit/i.test(err.message);
+}
+
+/** Errors worth falling through to the next model for: rate limits,
+ *  5xx-ish transient failures, and "model not found / not available"
+ *  cases (a model getting pulled from the free tier without notice).
+ *  Errors that would fail identically on every model — a bad API key,
+ *  or the caller's own empty/oversized question — are NOT retried here;
+ *  those are thrown before this loop even starts. */
+function isRetryableAcrossModels(err: unknown): boolean {
+  if (!(err instanceof Error)) return true; // unknown shape — safer to try the next model
+  if (isRateLimitError(err)) return true;
+  return /5\d\d|unavailable|not found|overloaded|internal/i.test(err.message);
+}
+
 /** Answers a visitor's question about a specific portfolio project using
  *  Gemini, grounded in that project's real description/features/stack.
  *  Same signature the mock version had (`ask-project.mock.ts`) — nothing
- *  else in AskProject.tsx needs to change for this swap. */
+ *  else in AskProject.tsx needs to change for this swap.
+ *
+ *  Tries each model in MODEL_FALLBACK_CHAIN in order, moving to the next
+ *  one on any retryable failure (rate limit, transient/server error, or
+ *  a model that's been pulled from free access). Only the *last* model's
+ *  error is surfaced to the caller, since it's the most informative one
+ *  ("everything is currently unavailable" beats "the first model, which
+ *  we gave up on three tries ago, was rate limited"). */
 export async function getAIResponse(projectKey: ProjectKey, question: string): Promise<string> {
   const q = question.trim();
   if (!q) {
@@ -76,71 +117,86 @@ export async function getAIResponse(projectKey: ProjectKey, question: string): P
   const ai = getClient();
   const context = buildProjectContext(projectKey);
 
-  try {
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: q,
-      config: {
-        // Loose, not a hard security boundary — a determined person can
-        // still route around this. It just keeps "answer questions about
-        // this specific project" as the path of least resistance for a
-        // widget that's sitting behind an intentionally-exposed key.
-        systemInstruction: [
-          "You are the developer of ONE specific software project, answering a",
-          "recruiter or hiring manager's question about it directly — in an",
-          "interview tone, not a chatbot tone. Never sound like an AI assistant:",
-          'no "Great question!", no enthusiasm-by-exclamation-point, no hedging',
-          "disclaimers, no restating the question back.",
-          "",
-          "Ground every claim in the project context below. Never invent facts",
-          "not present in it — this includes technical details AND metrics",
-          "(user counts, performance numbers, dates) that aren't stated. If",
-          "asked something the context doesn't cover, say so plainly in one",
-          "sentence rather than guessing.",
-          "",
-          "If the question isn't about this project, say briefly that you can",
-          "only answer questions about this project.",
-          "",
-          "Structure the answer as: the specific decision or challenge that's",
-          "actually hard to fake (not the project's category), the reasoning",
-          "behind it, and a concrete outcome — in that order. Lead with",
-          "whatever detail in the context is least likely to appear in a",
-          "tutorial clone of this idea, not with a generic restatement of what",
-          "the project is.",
-          "",
-          "2-5 short sentences. Plain prose only — no markdown, no bullet",
-          "points, no headers, no bold. Plainspoken and specific, not",
-          'resume-speak: avoid "leveraged", "utilized", "seamless",',
-          '"robust", "passionate about". End on the concrete outcome, not a',
-          "trailing caveat or a tech-stack recap.",
-          "",
-          context,
-        ].join("\n"),
-        maxOutputTokens: 8000,
-      },
-    });
+  const systemInstruction = [
+    "You are the developer of ONE specific software project, answering a",
+    "recruiter or hiring manager's question about it directly — in an",
+    "interview tone, not a chatbot tone. Never sound like an AI assistant:",
+    'no "Great question!", no enthusiasm-by-exclamation-point, no hedging',
+    "disclaimers, no restating the question back.",
+    "",
+    "Ground every claim in the project context below. Never invent facts",
+    "not present in it — this includes technical details AND metrics",
+    "(user counts, performance numbers, dates) that aren't stated. If",
+    "asked something the context doesn't cover, say so plainly in one",
+    "sentence rather than guessing.",
+    "",
+    "If the question isn't about this project, say briefly that you can",
+    "only answer questions about this project.",
+    "",
+    "Structure the answer as: the specific decision or challenge that's",
+    "actually hard to fake (not the project's category), the reasoning",
+    "behind it, and a concrete outcome — in that order. Lead with",
+    "whatever detail in the context is least likely to appear in a",
+    "tutorial clone of this idea, not with a generic restatement of what",
+    "the project is.",
+    "",
+    "2-5 short sentences. Plain prose only — no markdown, no bullet",
+    "points, no headers, no bold. Plainspoken and specific, not",
+    'resume-speak: avoid "leveraged", "utilized", "seamless",',
+    '"robust", "passionate about". End on the concrete outcome, not a',
+    "trailing caveat or a tech-stack recap.",
+    "",
+    context,
+  ].join("\n");
 
-    const text = response.text;
-    if (!text) {
-      throw new Error("no response generated. try rephrasing.");
-    }
-    return text.trim();
-  } catch (err) {
-    // Re-throw as a plain Error with a message AskProject.tsx can render
-    // directly (`[error] ${err.message}`) — the SDK's own error shapes
-    // vary (network vs. API-level rejection), so this normalizes them
-    // rather than leaking a raw SDK error object into the UI.
-    if (err instanceof Error) {
-      // Gemini's rate-limit errors surface as 429s in the message text —
-      // worth a friendlier message than the raw API error string, since
-      // this widget has no server-side rate limiting of its own (only
-      // the client-side COOLDOWN_MS in AskProject.tsx, which a page
-      // refresh trivially bypasses).
-      if (err.message.includes("429") || /rate.?limit/i.test(err.message)) {
-        throw new Error("rate limited — try again in a moment.");
+  let lastErr: Error = new Error("request failed. try again.");
+
+  for (let i = 0; i < MODEL_FALLBACK_CHAIN.length; i++) {
+    const model = MODEL_FALLBACK_CHAIN[i];
+    const isLastModel = i === MODEL_FALLBACK_CHAIN.length - 1;
+
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: q,
+        config: {
+          systemInstruction,
+          maxOutputTokens: 8000,
+        },
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("no response generated. try rephrasing.");
       }
-      throw new Error(err.message);
+      return text.trim();
+    } catch (err) {
+      const normalized = err instanceof Error ? err : new Error("request failed. try again.");
+
+      // "no response generated" isn't a model-availability problem, it's
+      // Gemini returning an empty completion (e.g. safety filtering) —
+      // retrying on a different model can plausibly help, so let it fall
+      // through the same retry path rather than special-casing it out.
+
+      if (!isRetryableAcrossModels(normalized) || isLastModel) {
+        lastErr = normalized;
+        break;
+      }
+
+      // Not the last model and the failure looks transient/model-specific
+      // — log for visibility, then fall through to the next model in the
+      // chain instead of surfacing this error to the caller.
+      console.warn(`[getAIResponse] ${model} failed, falling back:`, normalized.message);
+      lastErr = normalized;
     }
-    throw new Error("request failed. try again.");
   }
+
+  // Friendlier message when every model in the chain was rate limited —
+  // this widget has no server-side rate limiting of its own (only the
+  // client-side COOLDOWN_MS in AskProject.tsx, which a page refresh
+  // trivially bypasses), so this case is expected to happen sometimes.
+  if (isRateLimitError(lastErr)) {
+    throw new Error("rate limited — try again in a moment.");
+  }
+  throw new Error(lastErr.message);
 }

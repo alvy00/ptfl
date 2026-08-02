@@ -37,7 +37,27 @@ function getClient(): GoogleGenAI {
   return client;
 }
 
-const MODEL = "gemini-3.6-flash";
+/**
+ * Fallback chain of free-tier Gemini models, tried in order on any
+ * failure (rate limit, transient error, model-specific outage). Ordered
+ * strongest-capability-first so quality only degrades when it has to.
+ *
+ * Kept identical to ask-project.ts's chain on purpose — both widgets
+ * share one API key/project, so they share one quota pool and should
+ * degrade the same way. If you update one, update the other.
+ *
+ * As of mid-2026, Google's free tier no longer includes any Pro model
+ * (Pro moved to paid-only in April 2026) — the free lineup is the Flash
+ * / Flash-Lite family. Re-check
+ * https://ai.google.dev/gemini-api/docs/pricing periodically — this
+ * list WILL go stale as Google reshuffles the free tier again.
+ */
+const MODEL_FALLBACK_CHAIN = [
+  "gemini-3.5-flash",
+  "gemini-3.1-flash-lite",
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
+] as const;
 
 const MAX_QUERY_LENGTH = 200;
 
@@ -139,6 +159,23 @@ function buildSearchContext(query: string, matches: CommitMatch[]): string {
   ].join("\n\n");
 }
 
+function isRateLimitError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return err.message.includes("429") || /rate.?limit/i.test(err.message);
+}
+
+/** Errors worth falling through to the next model for: rate limits,
+ *  5xx-ish transient failures, and "model not found / not available"
+ *  cases (a model getting pulled from the free tier without notice).
+ *  Errors that would fail identically on every model — a bad API key,
+ *  or the caller's own empty/oversized query — are NOT retried here;
+ *  those are thrown before this loop even starts. */
+function isRetryableAcrossModels(err: unknown): boolean {
+  if (!(err instanceof Error)) return true; // unknown shape — safer to try the next model
+  if (isRateLimitError(err)) return true;
+  return /5\d\d|unavailable|not found|overloaded|internal/i.test(err.message);
+}
+
 /** Answers a visitor's search query by synthesizing across the
  *  keyword-matched commits below it, using Gemini grounded in those
  *  commits' real hashes/messages/branches. Same signature the mock
@@ -147,7 +184,12 @@ function buildSearchContext(query: string, matches: CommitMatch[]): string {
  *  Split in two on purpose: `getMatches` is synchronous (pure keyword
  *  scoring, no network) so the UI can render the commit list the instant
  *  the user hits enter, instead of waiting on the full round trip below
- *  just to show something that was already known locally. */
+ *  just to show something that was already known locally.
+ *
+ *  Tries each model in MODEL_FALLBACK_CHAIN in order, moving to the next
+ *  one on any retryable failure (rate limit, transient/server error, or
+ *  a model that's been pulled from free access). Only the *last* model's
+ *  error is surfaced to the caller. */
 export function getMatches(query: string): CommitMatch[] {
   const q = query.trim();
   if (!q) return [];
@@ -167,61 +209,76 @@ export async function getSearchAnswer(query: string, matches: CommitMatch[]): Pr
   const ai = getClient();
   const context = buildSearchContext(q, matches);
 
-  try {
-    const response = await ai.models.generateContent({
-      model: MODEL,
-      contents: q,
-      config: {
-        // Loose, not a hard security boundary — same reasoning as
-        // ask-project.ts. Keeps "summarize these commits" the path of
-        // least resistance for a widget sitting behind an
-        // intentionally-exposed key.
-        systemInstruction: [
-          "You are simulating `git log --all --grep=` search output for a",
-          "developer's portfolio site. The user typed a search query; below",
-          "are the commits that keyword-matched it, each with hash, branch,",
-          "and message.",
-          "",
-          "Write a short synthesis of what those commits show, in the voice",
-          "of the developer explaining their own work — not a chatbot",
-          "describing search results. Never sound like an AI assistant: no",
-          '"Great question!", no enthusiasm-by-exclamation-point, no hedging',
-          "disclaimers, no restating the query back.",
-          "",
-          "Ground every claim in the commits and project context below.",
-          "Never invent commits, hashes, or details not present in it. If no",
-          "commits matched, say so plainly in one sentence — don't guess at",
-          "what might exist.",
-          "",
-          "1-3 short sentences. Plain prose only — no markdown, no bullet",
-          "points, no headers, no bold, no commit hashes inline (the UI",
-          "lists those separately below the answer). Plainspoken and",
-          'specific, not resume-speak: avoid "leveraged", "utilized",',
-          '"seamless", "robust", "passionate about".',
-          "",
-          context,
-        ].join("\n"),
-        maxOutputTokens: 4000,
-      },
-    });
+  const systemInstruction = [
+    "You are simulating `git log --all --grep=` search output for a",
+    "developer's portfolio site. The user typed a search query; below",
+    "are the commits that keyword-matched it, each with hash, branch,",
+    "and message.",
+    "",
+    "Write a short synthesis of what those commits show, in the voice",
+    "of the developer explaining their own work — not a chatbot",
+    "describing search results. Never sound like an AI assistant: no",
+    '"Great question!", no enthusiasm-by-exclamation-point, no hedging',
+    "disclaimers, no restating the query back.",
+    "",
+    "Ground every claim in the commits and project context below.",
+    "Never invent commits, hashes, or details not present in it. If no",
+    "commits matched, say so plainly in one sentence — don't guess at",
+    "what might exist.",
+    "",
+    "1-3 short sentences. Plain prose only — no markdown, no bullet",
+    "points, no headers, no bold, no commit hashes inline (the UI",
+    "lists those separately below the answer). Plainspoken and",
+    'specific, not resume-speak: avoid "leveraged", "utilized",',
+    '"seamless", "robust", "passionate about".',
+    "",
+    context,
+  ].join("\n");
 
-    const text = response.text;
-    if (!text) {
-      throw new Error("no response generated. try rephrasing.");
-    }
-    return text.trim();
-  } catch (err) {
-    // Re-throw as a plain Error with a message GlobalSearch.tsx can
-    // render directly — same normalization as ask-project.ts, since the
-    // SDK's own error shapes vary (network vs. API-level rejection).
-    if (err instanceof Error) {
-      if (err.message.includes("429") || /rate.?limit/i.test(err.message)) {
-        throw new Error("rate limited — try again in a moment.");
+  let lastErr: Error = new Error("request failed. try again.");
+
+  for (let i = 0; i < MODEL_FALLBACK_CHAIN.length; i++) {
+    const model = MODEL_FALLBACK_CHAIN[i];
+    const isLastModel = i === MODEL_FALLBACK_CHAIN.length - 1;
+
+    try {
+      const response = await ai.models.generateContent({
+        model,
+        contents: q,
+        config: {
+          systemInstruction,
+          maxOutputTokens: 4000,
+        },
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("no response generated. try rephrasing.");
       }
-      throw new Error(err.message);
+      return text.trim();
+    } catch (err) {
+      const normalized = err instanceof Error ? err : new Error("request failed. try again.");
+
+      if (!isRetryableAcrossModels(normalized) || isLastModel) {
+        lastErr = normalized;
+        break;
+      }
+
+      // Not the last model and the failure looks transient/model-specific
+      // — log for visibility, then fall through to the next model in the
+      // chain instead of surfacing this error to the caller.
+      console.warn(`[getSearchAnswer] ${model} failed, falling back:`, normalized.message);
+      lastErr = normalized;
     }
-    throw new Error("request failed. try again.");
   }
+
+  // Friendlier message when every model in the chain was rate limited —
+  // same reasoning as ask-project.ts: this widget has no server-side
+  // rate limiting of its own.
+  if (isRateLimitError(lastErr)) {
+    throw new Error("rate limited — try again in a moment.");
+  }
+  throw new Error(lastErr.message);
 }
 
 /** Convenience wrapper for callers that don't need the matches-first,

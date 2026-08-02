@@ -55,6 +55,16 @@ export function buildGeometry(layout: Layout) {
   // so the drawn content moves toward the screen edge rather than the
   // extra clearance simply eating further into text's own width.
   const graphW = isDesktopTier ? mainX + laneW * TOTAL_LANES : mainX + laneW * (BUGFIX_LANE + 1.25);
+  // Was a flat "1.5rem" (24px) hardcoded identically wherever the graph's
+  // left offset is needed (GitGraph.tsx's border-layer wrapper,
+  // GitGraphCommitTextColumn's `left` offset) — kept in sync only by a
+  // comment asking future edits to remember to update both. Computed here
+  // once instead, next to graphW, so those can't drift apart, and so
+  // mobile can use a smaller gap (pulling the text column left, buying it
+  // back some width — paired with mainX shifting left too in
+  // gitGraphData.ts, so both halves of the graph move left together)
+  // while desktop keeps the original 24px unchanged.
+  const textColumnGapPx = isDesktopTier ? 24 : 14;
   const height = topPad * 2 + (TOTAL_ROWS - 1) * rowH;
   const featureOffset = rowH * FEATURE_OFFSET_RATIO;
   const bugfixOffset = rowH * BUGFIX_OFFSET_RATIO;
@@ -233,7 +243,18 @@ export function buildGeometry(layout: Layout) {
     ),
   ];
 
-  return { yOf, laneX, graphW, height, branches, bugfixBranches, branchPath, bugfixPath, allNodes };
+  return {
+    yOf,
+    laneX,
+    graphW,
+    textColumnGapPx,
+    height,
+    branches,
+    bugfixBranches,
+    branchPath,
+    bugfixPath,
+    allNodes,
+  };
 }
 
 /** Scroll-progress window [rampInStart, rampInEnd, rampOutStart, rampOutEnd]
