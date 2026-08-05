@@ -1,27 +1,39 @@
 /* eslint-disable prettier/prettier */
 
-export type CommitContent = { hash: string; message: string };
+export type CommitContent = { hash: string; message: string; badges?: string[] };
 
 export const mainCommitContent: CommitContent[] = [
-  { hash: "a1b2c3d", message: "enroll: begin Chemical Engineering at RUET" },
+  {
+    hash: "a1b2c3d",
+    message:
+      "init: start Chemical Engineering degree at RUET (building a foundation in complex systems)",
+  },
   {
     hash: "e4f5g6h",
-    message: "learn: React, HTML, CSS, Tailwind, Node.js, Framer Motion, and Express",
+    message: "feat(core): dive into full-stack dev with React, TypeScript, Next.js, and Node.js",
   },
   {
     hash: "m1n2o3p",
     message:
-      "achieve: placed 2nd individually and shipped a Category A project at a private bootcamp",
+      "ship(prod): placed 2nd individually and shipped a Category A project at a private bootcamp",
   },
-  { hash: "q4r5s6t", message: "learn: Next.js and GSAP" },
-  { hash: "u7v8w9x", message: "learn: AI, LLMs, and RAG" },
-  { hash: "v1e2c3t", message: "learn: Vector DBs" },
-  { hash: "HEAD", message: "open to internship / junior developer roles" },
+  {
+    hash: "q4r5s6t",
+    message: "feat(ui): level up frontend animations and UI polish with GSAP and Framer Motion",
+  },
+  {
+    hash: "u7v8w9x",
+    message: "feat(ai): integrate LLM pipelines, semantic RAG architecture, and vector databases",
+  },
+  {
+    hash: "v1e2c3t",
+    message: "build: ship real-time web applications and paid client projects",
+  },
+  { hash: "HEAD", message: "release: open to internship / junior developer roles" },
 ];
 
-// 7 commits, in the same order as AUCTASYNC_ROWS = [9,10,13,14,15,16,17] —
-// commit2 (row10) and commit3 (row13) are where the bugfix branch is
-// bracketed from (rows 11-12 sit between them).
+// 3 commits: scaffold -> one feature commit (bugfix branch brackets off this
+// commit) -> milestone summarizing everything shipped.
 export const auctasyncCommitContent: CommitContent[] = [
   {
     hash: "b1c2d3e",
@@ -31,22 +43,13 @@ export const auctasyncCommitContent: CommitContent[] = [
   {
     hash: "b4f5g6h",
     message:
-      "feat(auctasync): implement WebSocket bid broadcasting with Supabase Auth + row-level security",
-  },
-  {
-    hash: "b2n3o4p",
-    message:
-      "feat(auctasync): implement drag-and-drop lot listing management with image uploads and per-lot bid history",
-  },
-  {
-    hash: "b7i8j9k",
-    message:
-      "feat(auctasync): integrate SSLCommerz checkout with coupon support and Chart.js auction analytics",
+      "feat(auctasync): implement WebSocket bid broadcasting with Supabase Auth, drag-and-drop lot listings with image uploads, and SSLCommerz checkout",
   },
   {
     hash: "b0l1m2n",
     message:
       "feat(auctasync): milestone — real-time bidding, listings, payments, and live analytics shipped to production",
+    badges: ["WebSockets", "Supabase", "SSLCommerz", "Chart.js"],
   },
 ];
 
@@ -71,6 +74,7 @@ export const assetverseCommitContent: CommitContent[] = [
     hash: "d7k8l9m",
     message:
       "feat(assetverse): milestone — Recharts analytics + PDF-exportable reports shipped to production",
+    badges: ["Stripe", "Recharts", "PDF Export"],
   },
 ];
 
@@ -94,9 +98,12 @@ export const asynclangaiCommitContent: CommitContent[] = [
     hash: "l0a1n2g",
     message:
       "feat(asynclangai): milestone — live voice practice with non-blocking AI feedback pipeline shipped",
+    badges: ["Vapi", "Firebase", "Zod"],
   },
 ];
 
+// 3 commits: scaffold -> one feature commit (session-state bugfix branch
+// brackets off this commit) -> milestone summarizing everything shipped.
 export const careerpilotCommitContent: CommitContent[] = [
   {
     hash: "c1d2e3f",
@@ -106,28 +113,13 @@ export const careerpilotCommitContent: CommitContent[] = [
   {
     hash: "c4g5h6i",
     message:
-      "feat(careerpilot): implement Gemini roadmap generation with Zod-validated structured output, generalized beyond tech careers to any skill domain",
-  },
-  {
-    hash: "c7h8i9j",
-    message:
-      "feat(careerpilot): implement live Vapi voice mock interviews with real-time conversational flow",
-  },
-  {
-    hash: "c5t6u7v",
-    message:
-      "feat(careerpilot): implement AI-generated interview/assessment question bank, goal-specific across technical, academic, and practical tracks",
-  },
-
-  {
-    hash: "c8w9x0y",
-    message:
-      "feat(careerpilot): implement persistent progress tracking — roadmap completion, quiz scores, and interview history in MongoDB",
+      "feat(careerpilot): implement Gemini roadmap generation, live Vapi voice mock interviews, and AI-generated question bank across technical, academic, and practical tracks",
   },
   {
     hash: "c7j8k9l",
     message:
       "feat(careerpilot): milestone — full learning loop shipped: roadmaps, quizzes, question bank, voice interviews, and progress tracking",
+    badges: ["Gemini", "Vapi", "Firebase", "MongoDB"],
   },
 ];
 
@@ -154,18 +146,5 @@ export const careerpilotBugfixCommitContent: CommitContent[] = [
   {
     hash: "sc4f5g6",
     message: "fix(careerpilot): resolve session-state bug with corrected state management",
-  },
-];
-
-export const careerpilotDuplicateSubmitBugfixCommitContent: CommitContent[] = [
-  {
-    hash: "cd1x2y3",
-    message:
-      "fix(careerpilot): reproduce and isolate duplicate roadmap generation on rapid re-submit",
-  },
-  {
-    hash: "cd4z5a6",
-    message:
-      "fix(careerpilot): resolve duplicate-submit race with an idempotency guard on generation",
   },
 ];

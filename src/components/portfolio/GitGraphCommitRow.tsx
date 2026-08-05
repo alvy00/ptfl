@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion, useTransform, useMotionValueEvent, type MotionValue } from "framer-motion";
 import type { MouseEvent } from "react";
 
-import { PALETTE } from "@/lib/portfolio/gitGraphData";
+import { CONTACT_EMAIL, PALETTE } from "@/lib/portfolio/gitGraphData";
 import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 import { useDecryptText } from "@/lib/portfolio/useDecryptText";
 import { usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
@@ -49,6 +49,44 @@ export function GitGraphCommitRow({
   rowH: number;
 }) {
   const isMilestone = n.message.toLowerCase().includes("milestone");
+  // Typographic-contrast split: every message has a leading "type" token
+  // (feat(auctasync):, fix(auctasync):, enroll:, learn:, achieve:) that's
+  // bookkeeping, not the point — same role the hash already plays. The
+  // actual action (implement/scaffold/milestone/resolve, or for main-
+  // trunk rows the type word itself, since "learn"/"achieve"/"enroll" ARE
+  // the verb there) is what a scanning eye should land on. Splitting them
+  // into separate spans lets the type token recede at the hash's own dim
+  // gray while the verb gets real weight+brightness — previously the
+  // whole message was one uniform-weight span, so nothing in the dense
+  // commit list stood out as "the word that matters" versus "the word
+  // that's just plumbing."
+  const messageParts = (() => {
+    const colonMatch = n.message.match(/^([a-zA-Z]+(?:\([\w.-]+\))?):\s*/);
+    if (!colonMatch) return { lead: null, verb: null, dash: null, rest: n.message };
+    const typeToken = colonMatch[0];
+    const remainder = n.message.slice(typeToken.length);
+    const splitDash = (text: string) => {
+      // "milestone — real-time bidding..." — pull the em-dash off as its
+      // own piece so it can sit muted between the bold verb and the rest,
+      // instead of butting directly against the verb with no visual
+      // separation (the two were reading as one fused clause).
+      const dashMatch = text.match(/^(\s*—\s*)([\s\S]*)$/);
+      return dashMatch ? { dash: dashMatch[1], rest: dashMatch[2] } : { dash: null, rest: text };
+    };
+    if (n.isMain) {
+      // "learn: React, HTML..." — the type token itself IS the verb.
+      const { dash, rest } = splitDash(remainder);
+      return { lead: null, verb: typeToken.replace(/:\s*$/, ""), dash, rest };
+    }
+    // "feat(auctasync): implement WebSocket..." — type token recedes,
+    // first word of the remainder (implement/scaffold/milestone/resolve)
+    // is the verb that pops.
+    const wordMatch = remainder.match(/^(\S+)(\s*)([\s\S]*)$/);
+    if (!wordMatch) return { lead: typeToken, verb: null, dash: null, rest: remainder };
+    const [, firstWord, sep, afterWord] = wordMatch;
+    const { dash, rest } = splitDash(sep + afterWord);
+    return { lead: typeToken, verb: firstWord, dash, rest };
+  })();
   const pointerCoarse = usePointerCoarse();
   // Pivot: a plain feature-branch commit (not main, not HEAD) is no
   // longer its own clickable thing. Every one of them used to open the
@@ -78,7 +116,7 @@ export function GitGraphCommitRow({
   // real mailto link instead of a modal trigger — one fewer click between
   // "I'm interested" and an email actually being drafted.
   const isHeadContact = n.isHead;
-  const HEAD_EMAIL = "alvyahmed03@gmail.com";
+  const HEAD_EMAIL = CONTACT_EMAIL;
   const HEAD_SUBJECT = "Internship / junior developer role — via portfolio";
   const HEAD_BODY = [
     "Hi Alvy,",
@@ -289,8 +327,8 @@ export function GitGraphCommitRow({
                   replaces it. */}
               <span
                 ref={shouldDecrypt ? hashRef : undefined}
-                className="font-mono text-[11px] sm:text-[13px]"
-                style={{ color: n.isHead ? PALETTE.head : "#6b7280" }}
+                className="font-mono text-[11px] sm:text-[13px] opacity-80"
+                style={{ color: n.isHead ? PALETTE.head : "#707986" }}
               >
                 {n.hash}
               </span>
@@ -321,7 +359,13 @@ export function GitGraphCommitRow({
                 color: n.textColor,
                 fontWeight: n.isMain || n.isHead || isMilestone ? 500 : 400,
                 fontStyle: n.isBugfix ? "italic" : "normal",
-                opacity: n.isHead ? 0.9 : n.isMain ? 0.9 : 0.85,
+                // Bugfix rows were previously stacking three legibility
+                // penalties at once — italic + small text + this same
+                // 0.85 dimming every non-main row got. Italic alone is
+                // enough to mark "this is a fix"; bugfix rows now match
+                // main/HEAD's 0.9 instead of sitting dimmer than even
+                // plain feature-branch commits.
+                opacity: n.isHead || n.isMain || n.isBugfix ? 0.9 : 0.85,
                 textShadow: isHovered ? `0 0 12px ${n.color}66` : "none",
                 wordBreak: "break-word",
                 // HEAD's copy is the actual call-to-action, not a label —
@@ -334,7 +378,79 @@ export function GitGraphCommitRow({
                 textUnderlineOffset: "3px",
               }}
             >
-              {n.message}
+              {isHeadContact ? (
+                n.message
+              ) : (
+                <>
+                  {/* type token (feat(auctasync):, fix(...):) — recedes,
+                      same dim register as the hash beside it. Absent for
+                      main-trunk rows, where the type token IS the verb
+                      and gets promoted to `verb` below instead. */}
+                  {messageParts.lead && (
+                    <span
+                      className="font-normal"
+                      style={{ color: "#707986" }}
+                    >
+                      {messageParts.lead}
+                    </span>
+                  )}
+                  {/* the action verb — this is the word a scanning eye
+                      should land on, so it gets real weight and
+                      brightness contrast against everything else on the
+                      row instead of blending into one uniform message
+                      block. Main-trunk rows get the same brightness pop
+                      as branch rows now (previously only branch verbs got
+                      it, an inconsistency with no real reason behind it)
+                      — just anchored to PALETTE.mainText instead of a
+                      project color, since trunk rows have no branch
+                      color of their own. */}
+                  {messageParts.verb && (
+                    <span
+                      className="font-bold"
+                      style={{
+                        color: n.isMain ? PALETTE.mainText : n.color,
+                        filter: "brightness(1.25)",
+                      }}
+                    >
+                      {messageParts.verb}
+                    </span>
+                  )}
+                  {/* em-dash separator, pulled off rest and rendered on
+                      its own — muted, same register as `lead` — so it
+                      reads as punctuation between the bold verb and the
+                      plain-weight detail that follows, instead of
+                      butting directly against the bold verb with no
+                      visual break. */}
+                  {messageParts.dash && (
+                    <span style={{ color: "#707986" }}>{messageParts.dash}</span>
+                  )}
+                  {messageParts.rest}
+                </>
+              )}
+              {/* Tech-stack micro-badges — milestone-only, mirrors the
+                  "stack" pill treatment FeatureModal already uses for
+                  project.stack in CommitModal.tsx, at a smaller scale so
+                  it reads as a footnote to the message, not a competing
+                  element. Wrapped in its own block so pills always start
+                  on a fresh line under the message rather than trailing
+                  inline after it. */}
+              {isMilestone && n.badges && n.badges.length > 0 && (
+                <span className="mt-1.5 flex flex-wrap gap-1 sm:gap-1.5">
+                  {n.badges.map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-block rounded-full border px-1.5 py-[1px] sm:px-2 sm:py-0.5 text-[9px] sm:text-[10px] font-sans font-normal not-italic tracking-tight"
+                      style={{
+                        borderColor: `${n.color}44`,
+                        color: n.color,
+                        background: `${n.color}0c`,
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </span>
+              )}
             </span>
           </>
         );

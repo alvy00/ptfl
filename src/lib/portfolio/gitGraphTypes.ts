@@ -1,7 +1,7 @@
 import type { ProjectKey } from "@/data/portfolio/projects";
 import type { BugfixKey } from "@/data/portfolio/bugfixes";
 
-export type Commit = { hash: string; message: string };
+export type Commit = { hash: string; message: string; badges?: string[] };
 export type MainCommit = Commit & { row: number };
 
 export type BranchDef = {
@@ -61,6 +61,10 @@ export type NodeMeta = {
   bugfixKey?: BugfixKey;
   bugfixCommitIndex?: number;
   branchName?: string;
+  /** Tech-stack micro-badges for a milestone commit (e.g. ["Redis",
+   *  "WebSockets", "Docker"]) — carried straight through from the source
+   *  Commit's own `badges`, only ever populated on milestone rows. */
+  badges?: string[];
   /** [start, end] fractions of overall scroll progress (matching the same
    *  0..1 domain `drawRange`/branch `pathLength` use) across which this
    *  node's reveal (opacity + scale) is scrubbed. Replaces a one-shot

@@ -8,16 +8,26 @@ type IconShape = { viewBox: string; path: string };
 // nothing marking it as intentional. It's explicit now: read top to
 // bottom, first match wins.
 //
+// One exception, not encoded in this array's order: matchesFix() below
+// runs BEFORE this list is ever consulted, so "fix(...)"/"resolve" always
+// wins over every rule here, including MILESTONE — a message can't
+// currently match both (no bugfix commit message contains "milestone"),
+// but if one ever did, the fix icon would win, not milestone. Worth
+// knowing before assuming the array order alone is a complete picture of
+// precedence.
+//
 // To add a keyword: find the matching rule below and push onto its
 // `keywords` array. To add a wholly new category, add a new entry to
 // this array at the priority position you want it checked.
 const ICON_RULES: { keywords: string[]; shape: IconShape }[] = [
   {
-    // MILESTONE checked first, deliberately above scaffold/implement —
-    // a milestone commit is the most narratively significant type in
-    // this graph (see GitGraphCommitRow's decrypt-reveal gating, which
-    // treats milestones as first-class), so it should never lose its
-    // icon to an earlier-matching category by accident.
+    // MILESTONE checked first among these rules, deliberately above
+    // scaffold/implement — a milestone commit is the most narratively
+    // significant type in this graph (see GitGraphCommitRow's decrypt-
+    // reveal gating, which treats milestones as first-class), so it
+    // should never lose its icon to an earlier-matching category by
+    // accident. Still subordinate to matchesFix() above, per the note
+    // there.
     keywords: ["milestone"],
     shape: {
       viewBox: "0 0 24 24",

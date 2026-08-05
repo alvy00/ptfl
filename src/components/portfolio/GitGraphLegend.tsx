@@ -29,17 +29,26 @@ const PROJECT_JUMPS = BRANCH_DEFS.map((b) => ({
   label: projects[b.projectKey].name.split(" — ")[0],
 }));
 
+// Filter pills (a project-scoped timeline prune) were removed — this
+// component is back to its original scope: a jump-to-project minimap
+// plus the shape key. No props needed anymore; GitGraph.tsx mounts this
+// with no arguments.
 export function GitGraphLegend() {
   return (
     <div className="relative z-10 mb-3 flex flex-col gap-2 px-1.5 sm:px-4">
       {/* Click-to-jump minimap — lets a returning visitor go straight to a
           project instead of scroll-hunting for it. Purely additive next to
-          the shape key below; neither reads from or affects the other. */}
+          the shape key below; neither reads from or affects the other.
+          Text and svg sizing steps down at each tier (a bare `text-[Npx]`
+          with sm:/md: overrides — no xs: variant, since this codebase's
+          breakpoints don't define one) so the row stays on one wrapped
+          block instead of overflowing on the narrowest phones, without
+          needing a separate "jump" icon-only fallback. */}
       <nav
-        className="flex flex-wrap items-center gap-x-1.5 gap-y-1.5 font-mono text-[10px] sm:text-[11px]"
+        className="flex flex-wrap items-center gap-x-1 gap-y-1 sm:gap-x-1.5 sm:gap-y-1.5 font-mono text-[9px] sm:text-[11px]"
         aria-label="Jump to project"
       >
-        <span className="text-gray-600 select-none pr-0.5" aria-hidden="true">
+        <span className="text-gray-600 select-none pr-0.5 whitespace-nowrap" aria-hidden="true">
           jump:
         </span>
         {PROJECT_JUMPS.map((p) => (
@@ -48,7 +57,7 @@ export function GitGraphLegend() {
             type="button"
             onClick={() => highlightCommit(p.hash)}
             aria-label={`Jump to ${p.label}`}
-            className="rounded px-2 py-0.5 transition-colors duration-150 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+            className="rounded px-1.5 py-0.5 sm:px-2 whitespace-nowrap transition-colors duration-150 hover:bg-white/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
             style={{ color: p.color, border: `1px solid ${p.color}33` }}
           >
             {p.label}
@@ -57,18 +66,18 @@ export function GitGraphLegend() {
       </nav>
 
       <div
-        className="flex flex-wrap items-center gap-x-4 gap-y-1 font-mono text-[10px] sm:text-[11px] text-gray-500"
+        className="flex flex-wrap items-center gap-x-3 sm:gap-x-4 gap-y-1 font-mono text-[9px] sm:text-[11px] text-gray-500"
         role="note"
         aria-label="Legend: a circle marks a regular commit, a diamond marks a bugfix commit, a glowing circle marks HEAD"
       >
-        <span className="flex items-center gap-1.5" aria-hidden="true">
-          <svg className="w-[10px] h-[10px] sm:w-[11px] sm:h-[11px]" viewBox="0 0 10 10">
+        <span className="flex items-center gap-1.5 whitespace-nowrap" aria-hidden="true">
+          <svg className="w-[9px] h-[9px] sm:w-[11px] sm:h-[11px] shrink-0" viewBox="0 0 10 10">
             <circle cx="5" cy="5" r="4" fill="none" stroke="currentColor" strokeWidth="1.5" />
           </svg>
           commit
         </span>
-        <span className="flex items-center gap-1.5" aria-hidden="true">
-          <svg className="w-[10px] h-[10px] sm:w-[11px] sm:h-[11px]" viewBox="0 0 10 10">
+        <span className="flex items-center gap-1.5 whitespace-nowrap" aria-hidden="true">
+          <svg className="w-[9px] h-[9px] sm:w-[11px] sm:h-[11px] shrink-0" viewBox="0 0 10 10">
             <rect
               x="1.5"
               y="1.5"
@@ -83,8 +92,8 @@ export function GitGraphLegend() {
           </svg>
           <span style={{ color: BUGFIX_COLOR }}>fix</span>
         </span>
-        <span className="flex items-center gap-1.5" aria-hidden="true">
-          <svg className="w-[10px] h-[10px] sm:w-[11px] sm:h-[11px]" viewBox="0 0 10 10">
+        <span className="flex items-center gap-1.5 whitespace-nowrap" aria-hidden="true">
+          <svg className="w-[9px] h-[9px] sm:w-[11px] sm:h-[11px] shrink-0" viewBox="0 0 10 10">
             <circle cx="5" cy="5" r="4" fill={PALETTE.head} opacity={0.9} />
           </svg>
           <span style={{ color: PALETTE.head }}>HEAD</span>

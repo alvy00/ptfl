@@ -10,6 +10,7 @@ import {
   PALETTE,
   TOTAL_LANES,
   TOTAL_ROWS,
+  TRANSITION_GAP_RATIO,
 } from "./gitGraphData";
 import type { Layout, NodeMeta } from "./gitGraphTypes";
 
@@ -35,7 +36,28 @@ const BUGFIX_LANE = 3.25;
 /** All pixel geometry derived from a Layout — rebuilt only when the tier changes. */
 export function buildGeometry(layout: Layout) {
   const { rowH, topPad, mainX, laneW } = layout;
-  const yOf = (row: number) => topPad + row * rowH;
+  // Extra breathing room injected at each project handoff on the trunk
+  // (AssetVerse -> AuctaSync, AuctaSync -> AsyncLangAI, AsyncLangAI ->
+  // CareerPilot) — the density complaint was specifically about these
+  // jumps feeling cramped, not the graph as a whole, so this is a fixed
+  // px gap added right before each project's sourceRow rather than a
+  // global rowH increase (which would just re-cram everything at a
+  // bigger uniform scale instead of targeting the actual problem rows).
+  // Kept as extra PIXELS layered on top of yOf's normal row*rowH math,
+  // not extra ROWS — every existing row index (MAIN_ROWS, AUCTASYNC_ROWS,
+  // etc. in gitGraphData.ts) stays exactly as-is; nothing to renumber.
+  // Ratio itself lives in gitGraphData.ts (TRANSITION_GAP_RATIO), next to
+  // FEATURE_OFFSET_RATIO/BUGFIX_OFFSET_RATIO, since it's a tunable design
+  // value, not something derived here.
+  const TRANSITION_GAP = rowH * TRANSITION_GAP_RATIO;
+  // The first branch (AssetVerse, sourceRow 1) forks right off the very
+  // top of the trunk — there's no "previous project" crowding that jump,
+  // so it's deliberately excluded; only handoffs BETWEEN two projects
+  // get the extra gap.
+  const transitionRows = BRANCH_DEFS.slice(1).map((b) => b.sourceRow);
+  const extraGapBefore = (row: number) =>
+    transitionRows.filter((r) => r <= row).length * TRANSITION_GAP;
+  const yOf = (row: number) => topPad + row * rowH + extraGapBefore(row);
   const laneX = (lane: number) => mainX + lane * laneW;
   // Branched by tier via referential comparison against LAYOUTS' own
   // stable object literals (GitGraph.tsx always passes `LAYOUTS[tier]`
@@ -65,7 +87,7 @@ export function buildGeometry(layout: Layout) {
   // gitGraphData.ts, so both halves of the graph move left together)
   // while desktop keeps the original 24px unchanged.
   const textColumnGapPx = isDesktopTier ? 24 : 14;
-  const height = topPad * 2 + (TOTAL_ROWS - 1) * rowH;
+  const height = topPad + yOf(TOTAL_ROWS - 1);
   const featureOffset = rowH * FEATURE_OFFSET_RATIO;
   const bugfixOffset = rowH * BUGFIX_OFFSET_RATIO;
 
@@ -222,6 +244,7 @@ export function buildGeometry(layout: Layout) {
         commitTotal: b.commits.length,
         branchName: i === 0 ? b.name : undefined,
         branchGroup: b.name,
+        badges: c.badges,
       })),
     ),
     ...bugfixBranches.flatMap((b, bi) =>

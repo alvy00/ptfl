@@ -7,7 +7,6 @@ import {
   careerpilotCommitContent,
   auctasyncBugfixCommitContent,
   careerpilotBugfixCommitContent,
-  careerpilotDuplicateSubmitBugfixCommitContent,
 } from "@/data/portfolio/commits";
 
 import type { BranchDef, BugfixDef, Commit, Layout, MainCommit, Tier } from "./gitGraphTypes";
@@ -39,8 +38,8 @@ export const LAYOUTS: Record<Tier, Layout> = {
 // ratio of row height instead, so they scale with the layout tier too.
 export const FEATURE_OFFSET_RATIO = 27 / 68;
 // Was 24/68 (~0.35 of a row) — sourceRow/mergeRow for a bugfix sit exactly
-// one row away from its actual first/last commit (e.g. duplicate-submit:
-// sourceRow 22, first commit at row 23), same structural gap
+// one row away from its actual first/last commit (e.g. auctasync-race-
+// condition: sourceRow 9, first commit at row 10), same structural gap
 // FEATURE_OFFSET_RATIO also has to close. But a feature box holds 5-7
 // commits, so that gap is a small fraction of its total height; a bugfix
 // box only ever holds 2 commits, so the same absolute gap ends up bigger
@@ -49,6 +48,17 @@ export const FEATURE_OFFSET_RATIO = 27 / 68;
 // leaving a small, intentional breath of clearance rather than a near-
 // full empty row above/below.
 export const BUGFIX_OFFSET_RATIO = 52 / 68;
+
+// Extra breathing room injected on the trunk at each project handoff
+// (AssetVerse -> AuctaSync, AuctaSync -> AsyncLangAI, AsyncLangAI ->
+// CareerPilot) — expressed as a ratio of rowH, same convention as the two
+// offsets above, so it scales with tier too. Named/exported here (not
+// buried inside buildGeometry in gitGraphGeometry.ts) specifically so it's
+// easy to find and nudge without hunting through the geometry math — this
+// value is a design call ("how much extra gap feels right"), not a
+// derived one. 0.6 is a starting point; tune by eye against a real
+// render, not by reasoning about it further.
+export const TRANSITION_GAP_RATIO = 0.6;
 
 // Bugfix branches always use this color, regardless of which project they
 // belong to — color now encodes "what kind of branch is this" (project vs.
@@ -123,33 +133,50 @@ function bugfixTint(projectAccent: string): string {
   return mixHex(BUGFIX_COLOR, projectAccent, 0.32);
 }
 
-export const TOTAL_LANES = 8;
-export const TOTAL_ROWS = 32;
+// 7, not 8 — max lane actually in use is 6 (see BRANCH_DEFS/BUGFIX_DEFS
+// below). Was 8, left over from when careerpilot-duplicate-submit's
+// bugfix occupied lane 7; that bugfix was removed but this constant
+// wasn't brought back down with it. Bump this only if a new lane is
+// actually introduced.
+export const TOTAL_LANES = 7;
 
-// Row plan (32 rows total, 0-31), verified for full coverage with no
+// Single source of truth for the contact address — was previously a local
+// literal inside GitGraphCommitRow.tsx (for the HEAD row's mailto link);
+// now shared with the persistent CTA button too, so there's exactly one
+// place to update if this ever changes.
+export const CONTACT_EMAIL = "alvyahmed03@gmail.com";
+export const TOTAL_ROWS = 25;
+
+// Row plan (25 rows total, 0-24), verified for full coverage with no
 // gaps/collisions before this was written:
 // 0 enroll | 1 learn(react/html/css/tailwind/node/framer/express)
 // 2-5 AssetVerse (4 commits) | 6 achieve(bootcamp) | 7 learn(nextjs/gsap)
-// 8-14 AuctaSync (7 rows: 5 commits + its 2-commit bugfix at 10-11,
-//   between commit2 and commit3) | 15 learn(ai/llm/rag)
-// 16-19 AsyncLangAI (4 commits) | 20 learn(vector db)
-// 21-30 CareerPilot (10 rows: 6 commits + duplicate-submit bugfix at
-//   23-24 + session-state bugfix at 26-27) | 31 HEAD
+// 8-12 AuctaSync (5 rows: 3 commits — scaffold/feature/milestone — + its
+//   2-commit bugfix at 10-11, bracketing the feature commit at row 9 and
+//   the milestone at row 12) | 13 learn(ai/llm/rag)
+// 14-17 AsyncLangAI (4 commits) | 18 learn(vector db)
+// 19-23 CareerPilot (5 rows: 3 commits — scaffold/feature/milestone — +
+//   its session-state bugfix at 21-22, bracketing the feature commit at
+//   row 20 and the milestone at row 23) | 24 HEAD
 //
-// Bugfix branches are back to 2 commits (reproduce + resolve) — the
-// modal no longer opens per-row-click; the whole bugfix box (see
-// GitGraphBugfixBox) is now the single click target spanning both
-// commits, mirroring how GitGraphFeatureCard already does this for
-// feature branches. That's what makes 2 commits safe again: they're
-// display-only now, not a redundant pair of identical click targets.
-const MAIN_ROWS = [0, 1, 6, 7, 15, 20, 31];
+// Both AuctaSync and CareerPilot were collapsed down to the same
+// scaffold -> one feature commit -> milestone shape. CareerPilot's
+// duplicate-submit bugfix was dropped entirely (only session-state is
+// retained); its row range is freed up rather than reused, keeping the
+// remaining row math a straightforward renumbering of the old plan.
+//
+// Bugfix branches are 2 commits (reproduce + resolve) — the modal
+// doesn't open per-row-click; the whole bugfix box (see
+// GitGraphBugfixBox) is the single click target spanning both commits,
+// mirroring how GitGraphFeatureCard already does this for feature
+// branches.
+const MAIN_ROWS = [0, 1, 6, 7, 13, 18, 24];
 const ASSETVERSE_ROWS = [2, 3, 4, 5];
-const AUCTASYNC_ROWS = [8, 9, 12, 13, 14];
+const AUCTASYNC_ROWS = [8, 9, 12];
 const AUCTASYNC_BUGFIX_ROWS = [10, 11];
-const ASYNCLANGAI_ROWS = [16, 17, 18, 19];
-const CAREERPILOT_ROWS = [21, 22, 25, 28, 29, 30];
-const CAREERPILOT_BUGFIX_ROWS = [26, 27]; // session-state — after voice interviews (row 25)
-const CAREERPILOT_DUPLICATE_SUBMIT_BUGFIX_ROWS = [23, 24]; // duplicate-submit — after roadmap gen (row 22)
+const ASYNCLANGAI_ROWS = [14, 15, 16, 17];
+const CAREERPILOT_ROWS = [19, 20, 23];
+const CAREERPILOT_BUGFIX_ROWS = [21, 22]; // session-state — brackets the feature commit (row 20)
 
 const withRows = (content: Commit[], rows: number[]): (Commit & { row: number })[] =>
   content.map((c, i) => ({ ...c, row: rows[i] }));
@@ -174,7 +201,7 @@ export const BRANCH_DEFS: BranchDef[] = [
     color: PALETTE.projects.auctasync.accent,
     lane: 2,
     sourceRow: 7,
-    mergeRow: 15,
+    mergeRow: 13,
     delay: 1.5,
     commits: withRows(auctasyncCommitContent, AUCTASYNC_ROWS),
   },
@@ -183,8 +210,8 @@ export const BRANCH_DEFS: BranchDef[] = [
     projectKey: "asynclangai",
     color: PALETTE.projects.asynclangai.accent,
     lane: 4,
-    sourceRow: 15,
-    mergeRow: 20,
+    sourceRow: 13,
+    mergeRow: 18,
     delay: 1.75,
     commits: withRows(asynclangaiCommitContent, ASYNCLANGAI_ROWS),
   },
@@ -193,52 +220,36 @@ export const BRANCH_DEFS: BranchDef[] = [
     projectKey: "careerpilot",
     color: PALETTE.projects.careerpilot.accent,
     lane: 5,
-    sourceRow: 20,
-    mergeRow: 31,
+    sourceRow: 18,
+    mergeRow: 24,
     delay: 2.0,
     commits: withRows(careerpilotCommitContent, CAREERPILOT_ROWS),
   },
 ];
 
 // Order here also drives BRANCH_STAGGER's per-branch reveal delay in
-// buildGeometry (via each entry's array index) — duplicate-submit stays
-// listed before session-state, matching the row-plan order above.
+// buildGeometry (via each entry's array index).
 export const BUGFIX_DEFS: BugfixDef[] = [
   {
     name: "bugfix/auctasync-race-condition",
     bugfixKey: "auctasync-race-condition",
     parentLane: 2,
     lane: 3,
-    // Brackets commit2 (WebSocket bid broadcasting, row 9) and commit3
-    // (listing-management, row 12).
+    // Brackets the feature commit (row 9) and the milestone (row 12).
     sourceRow: 9,
     mergeRow: 12,
     delay: 1.4,
     commits: withRows(auctasyncBugfixCommitContent, AUCTASYNC_BUGFIX_ROWS),
   },
   {
-    name: "bugfix/careerpilot-duplicate-submit",
-    bugfixKey: "careerpilot-duplicate-submit",
-    parentLane: 5,
-    lane: 7,
-    // Brackets roadmap-gen (row 22) and voice-interviews (row 25).
-    sourceRow: 22,
-    mergeRow: 25,
-    delay: 2.2,
-    commits: withRows(
-      careerpilotDuplicateSubmitBugfixCommitContent,
-      CAREERPILOT_DUPLICATE_SUBMIT_BUGFIX_ROWS,
-    ),
-  },
-  {
     name: "bugfix/careerpilot-session-state",
     bugfixKey: "careerpilot-session-state",
     parentLane: 5,
     lane: 6,
-    // Brackets voice-interviews (row 25) and question-bank (row 28).
-    sourceRow: 25,
-    mergeRow: 28,
-    delay: 2.4,
+    // Brackets the feature commit (row 20) and the milestone (row 23).
+    sourceRow: 20,
+    mergeRow: 23,
+    delay: 2.2,
     commits: withRows(careerpilotBugfixCommitContent, CAREERPILOT_BUGFIX_ROWS),
   },
 ];

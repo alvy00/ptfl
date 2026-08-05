@@ -69,7 +69,7 @@ export const projects: Record<ProjectKey, Project> = {
   assetverse: {
     key: "assetverse",
     name: "AssetVerse — B2B Asset Management SaaS",
-    timeframe: { start: "2024-03-26", end: "2024-05-15", label: "Mar 2024 – May 2025" },
+    timeframe: { start: "2024-03-26", end: "2024-05-15", label: "Mar 2024 – May 2024" },
     description:
       "Full-stack, multi-tenant B2B SaaS that replaces spreadsheet-driven asset tracking with a centralized, role-based system for organizations to allocate, monitor, and audit company assets across every employee. Designed a subscription-gated company model where each employee account can independently affiliate with multiple companies simultaneously, with a decoupled Express/MongoDB API powering the whole platform.",
     features: [

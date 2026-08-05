@@ -190,3 +190,19 @@
 .custom-scrollbar {
   transition: scrollbar-color 0.2s ease;
 }
+
+@layer utilities {
+  .perspective-\[1200px\] {
+    perspective: 1200px;
+  }
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  .backface-hidden {
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  .rotateY-180 {
+    transform: rotateY(180deg);
+  }
+}
