@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { projects, type ProjectKey } from "@/data/portfolio/projects";
 import { CONTACT_EMAIL } from "@/lib/portfolio/gitGraphData";
 

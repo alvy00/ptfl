@@ -7,7 +7,7 @@ import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 import { useDecryptText } from "@/lib/portfolio/useDecryptText";
 import { usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
 
-import { CommitIcon } from "./CommitIcon";
+import { CommitIcon } from "../CommitIcon";
 
 export function GitGraphCommitRow({
   n,
@@ -387,10 +387,7 @@ export function GitGraphCommitRow({
                       main-trunk rows, where the type token IS the verb
                       and gets promoted to `verb` below instead. */}
                   {messageParts.lead && (
-                    <span
-                      className="font-normal"
-                      style={{ color: "#707986" }}
-                    >
+                    <span className="font-normal" style={{ color: "#707986" }}>
                       {messageParts.lead}
                     </span>
                   )}

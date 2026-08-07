@@ -9,7 +9,7 @@ import {
 } from "framer-motion";
 import { useEffect, useRef, useState, useMemo, type MouseEvent } from "react";
 
-import { CommitModal, type CommitSelection } from "./CommitModal";
+import { CommitModal, type CommitSelection } from "../CommitModal";
 import type { ProjectKey } from "@/data/portfolio/projects";
 import { projects } from "@/data/portfolio/projects";
 import { bugfixes } from "@/data/portfolio/bugfixes";
