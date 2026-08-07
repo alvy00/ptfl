@@ -43,13 +43,45 @@ export const Route = createFileRoute("/")({
 const VIEWS = ["graph", "overview"] as const;
 type ViewName = (typeof VIEWS)[number];
 
+const VIEW_STORAGE_KEY = "portfolio:preferred-view";
+
 export function Index() {
   const [isLoading, setIsLoading] = useState(true);
 
   // "graph" has no query param — bare "/" and "/?view=graph" are the same URL.
   const { view: viewParam } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const view: ViewName = viewParam === "overview" ? "overview" : "graph";
+
+  // Resolution order for the initial view:
+  // 1. Explicit query param (?view=overview) — always respected, so
+  //    shared/bookmarked links keep working.
+  // 2. A previously-stored preference in localStorage.
+  // 3. Default to "overview" for brand-new visitors. First-time visitors
+  //    (often recruiters skimming quickly) get the plain-language summary
+  //    instead of being dropped into a non-standard commit-graph UI with
+  //    no context — lower cognitive load, lower bounce risk. Returning
+  //    visitors who've already opted into the graph keep seeing it.
+  const [storedView, setStoredView] = useState<ViewName | null>(null);
+  const [hasReadStorage, setHasReadStorage] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(VIEW_STORAGE_KEY);
+      if (raw === "graph" || raw === "overview") setStoredView(raw);
+    } catch {
+      // localStorage unavailable (privacy mode, disabled, etc.) — fall
+      // back to the default resolution below.
+    } finally {
+      setHasReadStorage(true);
+    }
+  }, []);
+
+  const view: ViewName =
+    viewParam === "overview"
+      ? "overview"
+      : viewParam === undefined && hasReadStorage
+        ? (storedView ?? "overview")
+        : "graph";
 
   const switchTokenRef = useRef(0);
   const reduceMotion = useReducedMotion() ?? false;
@@ -112,11 +144,32 @@ export function Index() {
     window.scrollTo({ top: targetY, behavior: "smooth" });
   };
 
+  // Direction is derived from the actual VIEWS index delta of the
+  // transition just taken (previous -> next), not hardcoded per-pane.
+  // Clicking the tab to the right should always feel like content
+  // entering from the right; clicking left should always feel like it's
+  // entering from the left. A fixed per-pane direction broke that
+  // cause-and-effect mapping whenever the click didn't match the
+  // pane's assumed side. With only two views this is binary, but the
+  // signed delta generalizes if a third view is ever added.
+  const [transitionDirection, setTransitionDirection] = useState<1 | -1>(1);
+
   const switchView = (next: ViewName) => {
     if (next === view) return;
 
+    const delta = VIEWS.indexOf(next) - VIEWS.indexOf(view);
+    setTransitionDirection(delta > 0 ? 1 : -1);
+
     const token = ++switchTokenRef.current;
     scrollSettleCleanupRef.current?.();
+
+    try {
+      window.localStorage.setItem(VIEW_STORAGE_KEY, next);
+    } catch {
+      // ignore — persistence is a nice-to-have, not required for the
+      // toggle itself to work this session.
+    }
+    setStoredView(next);
 
     const applySwap = () => {
       if (switchTokenRef.current !== token) return;
@@ -184,18 +237,28 @@ export function Index() {
   // mount state. Trade-off: GitGraph's internal effects keep running
   // while its pane is hidden — acceptable here since none of them are
   // expensive per-frame, just expensive to *set up*.
-  const SLIDE_DISTANCE = 30;
+  //
+  // Choreography was previously opacity + x-slide + blur firing at once
+  // on top of the pill's own layout animation and the page-level
+  // AnimatePresence blur/scale/y-drift — four animation systems moving
+  // pixels simultaneously on a single tap is more than the eye can
+  // parse in one glance (Hick-Hyman: more concurrent changes, longer to
+  // resolve "what just happened"). Blur is dropped entirely here — it
+  // was the most expensive-looking property for the least information
+  // (it doesn't communicate direction or state, just "something is
+  // moving"). What's left is a plain crossfade + slide, so the toggle
+  // pill motion reads as the "cause" and this pane swap reads as the
+  // single, legible "effect" of it, rather than a second competing show.
+  const SLIDE_DISTANCE = 24;
   const paneAnimateFor = (pane: ViewName) => {
     const isActive = view === pane;
-    const direction = pane === "graph" ? 1 : -1; // graph settles from the right, overview from the left
+    // The pane being entered slides in from `transitionDirection`; the
+    // pane being left exits toward the opposite side — both driven by
+    // the actual click direction, not a fixed per-pane assumption.
+    const x = isActive ? 0 : SLIDE_DISTANCE * transitionDirection;
     return isActive
-      ? { opacity: 1, x: 0, filter: "blur(0px)", pointerEvents: "auto" as const }
-      : {
-          opacity: 0,
-          x: SLIDE_DISTANCE * direction,
-          filter: "blur(4px)",
-          pointerEvents: "none" as const,
-        };
+      ? { opacity: 1, x: 0, pointerEvents: "auto" as const }
+      : { opacity: 0, x, pointerEvents: "none" as const };
   };
 
   // 1. Loader Sequence
@@ -480,7 +543,12 @@ export function Index() {
                               className="h-1 w-1 rounded-full transition-opacity duration-150"
                               style={{ background: "#34d399", opacity: view === mode ? 1 : 0 }}
                             />
-                            {mode === "graph" ? "Git Log View" : "Standard Overview"}
+                            {/* Labels speak to user intent, not
+                                implementation mechanics — "Git Log" reads
+                                as terminal/diagnostics output to a
+                                non-technical recruiter and spikes
+                                cognitive load on arrival. */}
+                            {mode === "graph" ? "Commit Timeline" : "Overview"}
                           </span>
                         </motion.button>
                       ))}
