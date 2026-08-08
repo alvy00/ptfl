@@ -52,15 +52,10 @@ export function Index() {
   const { view: viewParam } = Route.useSearch();
   const navigate = Route.useNavigate();
 
-  // Resolution order for the initial view:
-  // 1. Explicit query param (?view=overview) — always respected, so
-  //    shared/bookmarked links keep working.
-  // 2. A previously-stored preference in localStorage.
-  // 3. Default to "overview" for brand-new visitors. First-time visitors
-  //    (often recruiters skimming quickly) get the plain-language summary
-  //    instead of being dropped into a non-standard commit-graph UI with
-  //    no context — lower cognitive load, lower bounce risk. Returning
-  //    visitors who've already opted into the graph keep seeing it.
+  // Resolution order: explicit ?view param > stored localStorage
+  // preference > "overview" default for first-time visitors (recruiters
+  // skimming quickly get the plain-language summary instead of a
+  // non-standard commit-graph UI with no context).
   const [storedView, setStoredView] = useState<ViewName | null>(null);
   const [hasReadStorage, setHasReadStorage] = useState(false);
 
@@ -69,8 +64,7 @@ export function Index() {
       const raw = window.localStorage.getItem(VIEW_STORAGE_KEY);
       if (raw === "graph" || raw === "overview") setStoredView(raw);
     } catch {
-      // localStorage unavailable (privacy mode, disabled, etc.) — fall
-      // back to the default resolution below.
+      // localStorage unavailable — falls back to the default below.
     } finally {
       setHasReadStorage(true);
     }
@@ -90,7 +84,7 @@ export function Index() {
   const scrollSettleCleanupRef = useRef<(() => void) | null>(null);
 
   const SCROLL_FOCUS_OFFSET = 24; // breathing room under the sticky search bar
-  const SCROLL_SETTLE_DEBOUNCE = 120; // ms of stillness before we call a smooth-scroll "arrived"
+  const SCROLL_SETTLE_DEBOUNCE = 120; // ms of stillness before a smooth-scroll counts as "arrived"
   const SCROLL_SETTLE_MAX_WAIT = 900; // hard ceiling so the swap can never hang
 
   const focusGraphSection = (onSettled: () => void, token: number) => {
@@ -108,13 +102,9 @@ export function Index() {
         SCROLL_FOCUS_OFFSET,
     );
 
-    // Skip the scroll if the section is already *reasonably* in view —
-    // previously this only skipped for a near-exact pixel match (<4px),
-    // which meant toggling while comfortably mid-scroll on the section
-    // still yanked the page a little every time. Tolerance scales with
-    // viewport height (15%) instead of a fixed px value, so it's
-    // consistent across phone/tablet/desktop rather than generous on a
-    // big monitor and stingy on a small one.
+    // Skip the scroll if the section is already reasonably in view.
+    // Tolerance scales with viewport height (15%) instead of a fixed px
+    // value, so it's consistent across phone/tablet/desktop.
     const skipTolerance = window.innerHeight * 0.15;
     if (Math.abs(targetY - window.scrollY) < skipTolerance) {
       onSettled();
@@ -144,14 +134,9 @@ export function Index() {
     window.scrollTo({ top: targetY, behavior: "smooth" });
   };
 
-  // Direction is derived from the actual VIEWS index delta of the
-  // transition just taken (previous -> next), not hardcoded per-pane.
-  // Clicking the tab to the right should always feel like content
-  // entering from the right; clicking left should always feel like it's
-  // entering from the left. A fixed per-pane direction broke that
-  // cause-and-effect mapping whenever the click didn't match the
-  // pane's assumed side. With only two views this is binary, but the
-  // signed delta generalizes if a third view is ever added.
+  // Direction is the signed VIEWS index delta of the transition just
+  // taken, not a fixed per-pane assumption — clicking right always feels
+  // like content entering from the right, regardless of which pane it is.
   const [transitionDirection, setTransitionDirection] = useState<1 | -1>(1);
 
   const switchView = (next: ViewName) => {
@@ -166,8 +151,7 @@ export function Index() {
     try {
       window.localStorage.setItem(VIEW_STORAGE_KEY, next);
     } catch {
-      // ignore — persistence is a nice-to-have, not required for the
-      // toggle itself to work this session.
+      // persistence is a nice-to-have, not required for the toggle itself
     }
     setStoredView(next);
 
@@ -176,9 +160,8 @@ export function Index() {
       navigate({
         search: (prev) => ({ ...prev, view: next === "graph" ? undefined : next }),
         replace: true,
-        // TanStack Router resets scroll to (0,0) on every navigation by
-        // default; this is a same-page param swap, not a real navigation
-        // the scroll position should reset for.
+        // This is a same-page param swap, not a real navigation the
+        // scroll position should reset for.
         resetScroll: false,
       });
     };
@@ -193,11 +176,9 @@ export function Index() {
 
   useEffect(() => () => scrollSettleCleanupRef.current?.(), []);
 
-  // Roving-tabindex keyboard nav for the tablist (WAI-ARIA APG "automatic
-  // activation" tabs pattern) — arrow keys move focus AND switch the
-  // view, Home/End jump to the ends. Without this the roles/aria-selected
-  // were announcing a tab interface to assistive tech that didn't
-  // actually behave like one.
+  // Roving-tabindex keyboard nav (WAI-ARIA APG "automatic activation"
+  // tabs pattern) — arrow keys move focus and switch the view, Home/End
+  // jump to the ends.
   const tabRefs = useRef<Record<ViewName, HTMLButtonElement | null>>({
     graph: null,
     overview: null,
@@ -216,59 +197,30 @@ export function Index() {
     tabRefs.current[nextView]?.focus();
   };
 
-  // Single shared spring — drives the toggle pill highlight, the pane
-  // slide, AND the height-lock (see heightSpring below). Previously two
-  // separately-tuned springs (380/30 for the pill, 400/32 for the pane)
-  // that happened to feel similar; unifying means the toggle and the
-  // content it controls can never quietly drift out of sync with each
-  // other from a future tweak to just one of them.
+  // Single shared spring drives the toggle pill highlight, the pane
+  // slide, and the height-lock (heightSpring below), so none of them can
+  // drift out of sync with the others from a future tweak to just one.
   const TOGGLE_SPRING = reduceMotion
     ? { duration: 0.01 }
     : { type: "spring" as const, stiffness: 400, damping: 32, mass: 0.8 };
 
   // Both panes stay mounted for the page's whole lifetime — GitGraph is
-  // too expensive to remount on every toggle (its own useScroll-driven
-  // springs, a particle canvas, event listeners all torn down and
-  // rebuilt from scratch each time), and mounting/unmounting via
-  // AnimatePresence also forced the exit and enter animations to run
-  // sequentially (mode="wait") rather than concurrently, which is what
-  // actually reads as a single continuous "morph" instead of two
-  // separate hits. Visibility is driven entirely by `animate`, never by
-  // mount state. Trade-off: GitGraph's internal effects keep running
-  // while its pane is hidden — acceptable here since none of them are
-  // expensive per-frame, just expensive to *set up*.
-  //
-  // Choreography was previously opacity + x-slide + blur firing at once
-  // on top of the pill's own layout animation and the page-level
-  // AnimatePresence blur/scale/y-drift — four animation systems moving
-  // pixels simultaneously on a single tap is more than the eye can
-  // parse in one glance (Hick-Hyman: more concurrent changes, longer to
-  // resolve "what just happened"). Blur is dropped entirely here — it
-  // was the most expensive-looking property for the least information
-  // (it doesn't communicate direction or state, just "something is
-  // moving"). What's left is a plain crossfade + slide, so the toggle
-  // pill motion reads as the "cause" and this pane swap reads as the
-  // single, legible "effect" of it, rather than a second competing show.
+  // too expensive to remount on every toggle (springs, particle canvas,
+  // listeners all torn down and rebuilt), and AnimatePresence would force
+  // exit/enter to run sequentially instead of as one continuous morph.
+  // Visibility is driven entirely by `animate`, never by mount state.
   const SLIDE_DISTANCE = 24;
   const paneAnimateFor = (pane: ViewName) => {
     const isActive = view === pane;
-    // The pane being entered slides in from `transitionDirection`; the
-    // pane being left exits toward the opposite side — both driven by
-    // the actual click direction, not a fixed per-pane assumption.
     const x = isActive ? 0 : SLIDE_DISTANCE * transitionDirection;
     return isActive
       ? { opacity: 1, x: 0, pointerEvents: "auto" as const }
       : { opacity: 0, x, pointerEvents: "none" as const };
   };
 
-  // 1. Loader Sequence
-  // Was a flat 1500ms regardless of whether anything was actually ready
-  // — pure perceived-latency tax with no technical backing, since nothing
-  // here is being fetched. Now resolves as soon as the document/fonts are
-  // actually ready, with a short floor (400ms) so the loader doesn't
-  // flash for a single frame on a fast load, and a ceiling (2500ms) as a
-  // safety net in case font-loading hangs or `document.fonts` is
-  // unavailable in some environment.
+  // Loader resolves as soon as document/fonts are actually ready, with a
+  // short floor (400ms, so it doesn't flash for one frame on a fast load)
+  // and a ceiling (2500ms, in case font-loading hangs).
   useEffect(() => {
     window.scrollTo(0, 0);
     let resolved = false;
@@ -296,20 +248,26 @@ export function Index() {
     return () => window.clearTimeout(ceiling);
   }, []);
 
-  // 2. Hero Scrubbed Minimization (Global Scroll)
   const { scrollY } = useScroll();
   const heroScale = useTransform(scrollY, [0, 400], [1, 0.8]);
   const heroOpacity = useTransform(scrollY, [0, 300], [1, 0]);
   const heroY = useTransform(scrollY, [0, 400], ["0%", "-5%"]);
 
-  // 3. Sticky search bar: hides 70% of its own height on scroll-down,
-  // fully reappears on scroll-up.
+  // Sticky search bar: hides 70% of its own height on scroll-down, fully
+  // reappears on scroll-up.
   const [sentinelEl, setSentinelEl] = useState<HTMLDivElement | null>(null);
   const [searchContentEl, setSearchContentEl] = useState<HTMLDivElement | null>(null);
   const [isSearchStuck, setIsSearchStuck] = useState(false);
   const isSearchStuckRef = useRef(false);
   const searchBarHeightRef = useRef(0);
   const searchHideY = useMotionValue(0);
+  // CommitModal locks body scroll while open, so the scroll listener below
+  // never fires while a modal is up — the bar can't react to needing to
+  // get out of the way on its own. GitGraph calls these explicitly on
+  // modal open/close: fully hidden (not just the 70% scroll-peek) while a
+  // modal is eating vertical space, restored once it closes.
+  const hideSearchBarForModal = () => searchHideY.set(-searchBarHeightRef.current);
+  const showSearchBarAfterModal = () => searchHideY.set(0);
   const searchHideYSpring = useSpring(searchHideY, { stiffness: 320, damping: 32, mass: 0.6 });
   const searchHideYDisplay = reduceMotion ? searchHideY : searchHideYSpring;
 
@@ -361,15 +319,11 @@ export function Index() {
     }
   });
 
-  // 4. Per-pane height measurement — both panes are permanently mounted
-  // and absolutely positioned (top/left/right only, no `bottom`, so each
-  // keeps its own intrinsic content height rather than stretching to
-  // fill the wrapper). The wrapper's own height is driven by a spring
-  // MotionValue using the SAME TOGGLE_SPRING as the pane slide, rather
-  // than a separately-timed CSS transition — previously the box resized
-  // on a fixed 0.45s tween while the content resized on a spring with no
-  // fixed duration, so on a slow-settling spring the box could visibly
-  // stop moving while the content was still animating.
+  // Per-pane height measurement — both panes are permanently mounted and
+  // absolutely positioned (no `bottom`, so each keeps its own intrinsic
+  // height). The wrapper's height is driven by a spring using the same
+  // TOGGLE_SPRING as the pane slide, so the box and its content move in
+  // lockstep instead of two separately-timed animations drifting apart.
   const [graphPaneEl, setGraphPaneEl] = useState<HTMLDivElement | null>(null);
   const [overviewPaneEl, setOverviewPaneEl] = useState<HTMLDivElement | null>(null);
   const [graphPaneHeight, setGraphPaneHeight] = useState<number | undefined>(undefined);
@@ -413,9 +367,8 @@ export function Index() {
   useEffect(() => {
     if (activePaneHeight == null) return;
     if (!hasSetInitialHeightRef.current) {
-      // First real measurement — jump straight to it instead of
-      // springing up from 0, since there's nothing to visually
-      // transition from yet.
+      // First real measurement — jump straight to it rather than
+      // springing up from 0, since there's nothing to transition from yet.
       heightMV.jump(activePaneHeight);
       hasSetInitialHeightRef.current = true;
     } else {
@@ -534,20 +487,13 @@ export function Index() {
                             />
                           )}
                           <span className="relative inline-flex items-center gap-1.5">
-                            {/* Secondary cue beyond color — a small dot
-                                that only appears on the active tab, so
-                                state doesn't rely purely on the text/pill
-                                color shift. */}
+                            {/* Secondary cue beyond color, for state that
+                                doesn't rely purely on color shift. */}
                             <span
                               aria-hidden="true"
                               className="h-1 w-1 rounded-full transition-opacity duration-150"
                               style={{ background: "#34d399", opacity: view === mode ? 1 : 0 }}
                             />
-                            {/* Labels speak to user intent, not
-                                implementation mechanics — "Git Log" reads
-                                as terminal/diagnostics output to a
-                                non-technical recruiter and spikes
-                                cognitive load on arrival. */}
                             {mode === "graph" ? "Commit Timeline" : "Overview"}
                           </span>
                         </motion.button>
@@ -580,12 +526,6 @@ export function Index() {
                 </motion.div>
               </motion.div>
 
-              {/* Both panes below are permanently mounted — see the
-                  comment above paneAnimateFor for why. `relative` gives
-                  them their positioning context; `style.height` tracks
-                  activePaneHeight via heightSpring, sharing TOGGLE_SPRING
-                  with the pane slide so the box and its content always
-                  move in lockstep. */}
               <motion.div
                 ref={graphSectionRef}
                 initial={{ opacity: 0, y: 60 }}
@@ -608,7 +548,10 @@ export function Index() {
                   style={{ zIndex: view === "graph" ? 2 : 1 }}
                 >
                   <div className="min-w-[500px] sm:min-w-0">
-                    <GitGraph />
+                    <GitGraph
+                      onModalOpen={hideSearchBarForModal}
+                      onModalClose={showSearchBarAfterModal}
+                    />
                   </div>
                 </motion.div>
 
