@@ -69,8 +69,15 @@ export const projects: Record<ProjectKey, Project> = {
     ],
     accent: "#f59e0b",
     images: [
-      // { id: "1", src: "/screenshots/auctasync/hero.png", alt: "AuctaSync live auction hero screen" },
-      // { id: "2", src: "/screenshots/auctasync/bidding.png", alt: "Live bidding view with real-time updates" },
+      { id: "1", src: "/auctasync/auctasync-home.png", alt: "AuctaSync home page" },
+      { id: "2", src: "/auctasync/auctasync-live.png", alt: "Live auction with real-time bidding" },
+      { id: "3", src: "/auctasync/auctasync-featured.png", alt: "Featured auction lots" },
+      { id: "4", src: "/auctasync/auctasync-past.png", alt: "Past auctions listing" },
+      { id: "5", src: "/auctasync/auctasync-dashboard.png", alt: "User dashboard" },
+      { id: "6", src: "/auctasync/auctasync-admin.png", alt: "Admin panel" },
+      { id: "7", src: "/auctasync/auctasync-leaderboards.png", alt: "Bidder leaderboards" },
+      { id: "8", src: "/auctasync/auctasync-login.png", alt: "Login page" },
+      { id: "10", src: "/auctasync/auctasync-types.png", alt: "Auction types overview" },
     ],
   },
   assetverse: {
@@ -259,7 +266,30 @@ export const projects: Record<ProjectKey, Project> = {
     demoUrl: "https://careerpilotasync.vercel.app/",
     codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/eg-careerpilot-asyncawait" }],
     accent: "#34d399",
-    images: [],
+    images: [
+      { id: "1", src: "/careerpilot/careerpilot-home.png", alt: "CareerPilot home page" },
+      {
+        id: "2",
+        src: "/careerpilot/careerpilot-roadmap.png",
+        alt: "AI-generated phase-based learning roadmap",
+      },
+      { id: "3", src: "/careerpilot/careerpilot-generator.png", alt: "Roadmap generator" },
+      {
+        id: "4",
+        src: "/careerpilot/careerpilot-dashboard.png",
+        alt: "Progress tracking dashboard",
+      },
+      { id: "5", src: "/careerpilot/careerpilot-quiz.png", alt: "Adaptive phase quiz" },
+
+      {
+        id: "7",
+        src: "/careerpilot/careerpilot-interview (2).png",
+        alt: "AI voice mock interview session, results",
+      },
+      { id: "8", src: "/careerpilot/careerpilot-feedback.png", alt: "Post-interview feedback" },
+      { id: "9", src: "/careerpilot/careerpilot-history.png", alt: "Interview and quiz history" },
+      { id: "11", src: "/careerpilot/careerpilot-login.png", alt: "Login page" },
+    ],
   },
 };
 
