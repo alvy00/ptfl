@@ -45,6 +45,19 @@ type ViewName = (typeof VIEWS)[number];
 
 const VIEW_STORAGE_KEY = "portfolio:preferred-view";
 
+// Cycled beneath the loader spinner (Upgrade #3 — perceived-wait ticker).
+const LOADER_MESSAGES = [
+  "Resolving dependencies...",
+  "Mounting commit tree...",
+  "Warming up the graph engine...",
+  "Syncing timeline state...",
+];
+
+const TAB_TOOLTIPS: Record<ViewName, string> = {
+  graph: "Chronological commit view",
+  overview: "Condensed summary view",
+};
+
 export function Index() {
   const [isLoading, setIsLoading] = useState(true);
 
@@ -226,6 +239,16 @@ export function Index() {
     return () => window.clearTimeout(ceiling);
   }, []);
 
+  // Upgrade #3 — cycles the loader ticker text while isLoading is true.
+  const [loaderMsgIndex, setLoaderMsgIndex] = useState(0);
+  useEffect(() => {
+    if (!isLoading) return;
+    const interval = setInterval(() => {
+      setLoaderMsgIndex((i) => (i + 1) % LOADER_MESSAGES.length);
+    }, 650);
+    return () => clearInterval(interval);
+  }, [isLoading]);
+
   const { scrollY } = useScroll();
   const heroScale = useTransform(scrollY, [0, 400], [1, 0.8]);
   const heroOpacity = useTransform(scrollY, [0, 300], [1, 0]);
@@ -364,6 +387,27 @@ export function Index() {
               transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
               className="h-10 w-10 rounded-full border-2 border-[#34d399] border-t-transparent shadow-[0_0_15px_rgba(52,211,153,0.3)] mb-6"
             />
+
+            {/* Upgrade #3 — terminal-style ticker + blinking cursor beneath the spinner */}
+            <div className="h-4 font-mono text-[11px] text-[#8b93a1] flex items-center gap-1.5">
+              <AnimatePresence mode="wait">
+                <motion.span
+                  key={loaderMsgIndex}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                >
+                  {LOADER_MESSAGES[loaderMsgIndex]}
+                </motion.span>
+              </AnimatePresence>
+              <motion.span
+                aria-hidden="true"
+                animate={reduceMotion ? { opacity: 1 } : { opacity: [1, 0] }}
+                transition={{ duration: 0.6, repeat: Infinity, repeatType: "reverse" }}
+                className="inline-block h-3 w-[6px] bg-[#34d399]"
+              />
+            </div>
           </motion.div>
         ) : (
           <motion.div
@@ -444,7 +488,7 @@ export function Index() {
                           onClick={() => switchView(mode)}
                           onKeyDown={(e) => handleTabKeyDown(e, mode)}
                           whileTap={reduceMotion ? undefined : { scale: 0.96 }}
-                          className="relative cursor-pointer rounded-full px-3 py-1.5 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399] focus:outline-none"
+                          className="group relative cursor-pointer rounded-full px-3 py-1.5 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399] focus:outline-none"
                           style={{ color: view === mode ? "#34d399" : "#8b93a1" }}
                         >
                           {view === mode && (
@@ -453,7 +497,34 @@ export function Index() {
                               className="absolute inset-0 -z-10 rounded-full"
                               style={{ background: "#34d39922" }}
                               transition={TOGGLE_SPRING}
-                            />
+                            >
+                              {/* Upgrade #1 — pulse + leading/afterglow particle.
+                                  key={view} forces a remount on every switch so these
+                                  play as fresh two-state tweens; layoutId stays untouched
+                                  above so it never competes with the shared-layout spring. */}
+                              {!reduceMotion && (
+                                <motion.span
+                                  key={view}
+                                  aria-hidden="true"
+                                  className="absolute inset-0 rounded-full"
+                                  style={{ background: "#34d399" }}
+                                  initial={{ opacity: 0.55, scale: 1 }}
+                                  animate={{ opacity: 0, scale: 1.12 }}
+                                  transition={{ duration: 0.4, ease: "easeOut" }}
+                                />
+                              )}
+                              {!reduceMotion && (
+                                <motion.span
+                                  key={`${view}-particle`}
+                                  aria-hidden="true"
+                                  className="absolute inset-0 rounded-full"
+                                  style={{ background: "#34d399", opacity: 0.35 }}
+                                  initial={{ opacity: 0.5, scale: 1, x: transitionDirection * -6 }}
+                                  animate={{ opacity: 0, scale: 1.6, x: 0 }}
+                                  transition={{ duration: 0.5, ease: "easeOut" }}
+                                />
+                              )}
+                            </motion.span>
                           )}
                           <span className="relative inline-flex items-center gap-1.5">
                             <span
@@ -462,6 +533,14 @@ export function Index() {
                               style={{ background: "#34d399", opacity: view === mode ? 1 : 0 }}
                             />
                             {mode === "graph" ? "Commit Timeline" : "Overview"}
+                          </span>
+
+                          {/* Upgrade #2 — tooltip with directional entry + delayed exit */}
+                          <span
+                            role="tooltip"
+                            className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/10 bg-[#16181d] px-2.5 py-1 text-[10px] font-mono text-[#e5e7eb] opacity-0 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.5)] transition-[opacity,transform] duration-150 ease-out translate-y-0 delay-100 group-hover:translate-y-0 group-hover:-translate-y-2 group-hover:opacity-100 group-hover:delay-0"
+                          >
+                            {TAB_TOOLTIPS[mode]}
                           </span>
                         </motion.button>
                       ))}

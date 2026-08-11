@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { motion, useTransform, type MotionValue } from "framer-motion";
 
 import { PALETTE } from "@/lib/portfolio/gitGraphData";
@@ -97,9 +98,16 @@ export function GitGraphNode({
             r={12.5 * nodeScale}
             fill={PALETTE.head}
             opacity={0.35}
+            // Explicit initial matching the static r/opacity above — without
+            // it Framer has to read the starting "r" and "opacity" back off
+            // the SVG node before first paint, which can resolve to
+            // undefined and throws "attribute r: Expected length,
+            // undefined" plus the matching opacity warning. Same class of
+            // fix as the branch paths in GitGraph.tsx.
+            initial={{ r: 12.5 * nodeScale, opacity: 0.35 }}
             animate={
               reduceMotion
-                ? { opacity: 0.3 }
+                ? { r: 12.5 * nodeScale, opacity: 0.3 }
                 : {
                     r: [12.5 * nodeScale, 20 * nodeScale, 12.5 * nodeScale],
                     opacity: [0.45, 0.05, 0.45],

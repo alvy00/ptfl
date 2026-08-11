@@ -1,3 +1,4 @@
+/* eslint-disable prettier/prettier */
 import { BRANCH_DEFS, BUGFIX_COLOR, PALETTE } from "@/lib/portfolio/gitGraphData";
 import { projects } from "@/data/portfolio/projects";
 

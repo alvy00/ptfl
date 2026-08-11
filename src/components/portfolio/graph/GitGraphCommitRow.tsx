@@ -1,14 +1,14 @@
 /* eslint-disable prettier/prettier */
 import { useState } from "react";
 import { motion, useTransform, useMotionValueEvent, type MotionValue } from "framer-motion";
-import type { MouseEvent } from "react";
+import type { FocusEvent, MouseEvent } from "react";
 
 import { CONTACT_EMAIL, PALETTE } from "@/lib/portfolio/gitGraphData";
 import type { NodeMeta } from "@/lib/portfolio/gitGraphTypes";
 import { useDecryptText } from "@/lib/portfolio/useDecryptText";
 import { usePointerCoarse } from "@/lib/portfolio/useGitGraphResponsive";
 
-import { CommitIcon } from "../CommitIcon";
+import { CommitIcon } from "../commit/CommitIcon";
 
 export function GitGraphCommitRow({
   n,
@@ -103,6 +103,14 @@ export function GitGraphCommitRow({
     glowColor: n.color,
   });
 
+  // Skips onEnter when the focus came from useFocusTrap's silent
+  // modal-close restoration (data-suppress-focus-highlight), so closing
+  // a modal doesn't permanently pin the active-branch border here.
+  const handleFocus = (e: FocusEvent<HTMLElement>) => {
+    if (e.currentTarget.dataset.suppressFocusHighlight) return;
+    onEnter();
+  };
+
   return (
     <li
       className="absolute inset-x-0 flex flex-col"
@@ -180,8 +188,6 @@ export function GitGraphCommitRow({
             )}
 
             <div className="flex items-center gap-1.5 shrink-0 tabular-nums pt-[2px]">
-              {/* No icon for main-trunk rows — the type-token verb
-                  (learn:/achieve:/enroll:) already carries that role there. */}
               {!n.isMain && (
                 <CommitIcon message={n.message} color={n.isHead ? PALETTE.head : n.textColor} />
               )}
@@ -259,7 +265,7 @@ export function GitGraphCommitRow({
             href={HEAD_MAILTO}
             onMouseEnter={onEnter}
             onMouseLeave={onLeave}
-            onFocus={onEnter}
+            onFocus={handleFocus}
             onBlur={onLeave}
             title={`Email ${HEAD_EMAIL}`}
             aria-label={commitAriaLabel}
@@ -279,7 +285,7 @@ export function GitGraphCommitRow({
             onClick={(e) => onOpen(n, e)}
             onMouseEnter={onEnter}
             onMouseLeave={onLeave}
-            onFocus={onEnter}
+            onFocus={handleFocus}
             onBlur={onLeave}
             title={n.message}
             aria-label={commitAriaLabel}

@@ -9,7 +9,7 @@ import {
 } from "framer-motion";
 import { useEffect, useRef, useState, useMemo, type MouseEvent } from "react";
 
-import { CommitModal, type CommitSelection } from "../CommitModal";
+import { CommitModal, type CommitSelection } from "../commit/CommitModal";
 import type { ProjectKey } from "@/data/portfolio/projects";
 import { projects } from "@/data/portfolio/projects";
 import { bugfixes } from "@/data/portfolio/bugfixes";
@@ -307,6 +307,13 @@ export function GitGraph({
               stroke={b.color}
               strokeWidth={2.25}
               strokeLinecap="round"
+              // `initial` matches the same expression as `animate` below —
+              // without it Framer has to read the opacity back off the SVG
+              // node on mount, which is undefined for a <path> that's never
+              // had an inline/computed opacity, producing the "animate
+              // opacity from undefined" warning. Giving it an explicit
+              // starting value removes the guesswork entirely.
+              initial={{ opacity: isDimmed(b.name) ? 0.15 : 0.9 }}
               animate={{ opacity: isDimmed(b.name) ? 0.15 : 0.9 }}
               transition={dimTransition}
               style={{
@@ -325,6 +332,7 @@ export function GitGraph({
               strokeWidth={2}
               strokeLinecap="round"
               strokeDasharray="5 4"
+              initial={{ opacity: isDimmed(b.branchGroup) ? 0.12 : 0.85 }}
               animate={{ opacity: isDimmed(b.branchGroup) ? 0.12 : 0.85 }}
               transition={dimTransition}
               style={{

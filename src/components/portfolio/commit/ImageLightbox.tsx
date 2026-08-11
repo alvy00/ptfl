@@ -1,6 +1,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { useEffect } from "react";
-import { useFocusTrap, REDUCED_MOTION_TRANSITION } from "./CommitModal";
+import { useFocusTrap } from "@/lib/portfolio/useFocusTrap";
+import { REDUCED_MOTION_TRANSITION } from "@/lib/portfolio/useModalMotion";
 import type { ProjectImage } from "./ProjectImageRail";
 
 type Props = {
@@ -9,34 +10,17 @@ type Props = {
   onClose: () => void;
 };
 
-// How long the backdrop lags behind the image on the way out. Kept as a
-// shared constant so the outer wrapper's own exit duration (which just
-// keeps AnimatePresence from unmounting everything early — it has no
-// visible fill of its own) can be sized to match exactly.
 const BACKDROP_EXIT_DELAY = 0.1;
 const BACKDROP_EXIT_DURATION = 0.22;
 const IMAGE_EXIT_DURATION = 0.16;
 
 // Sits above CommitModal's feature card (z-50) at z-[60], so it can be
-// closed on its own without dismissing the modal underneath it — Escape
-// and outside-click here only ever call this component's onClose.
+// closed on its own without dismissing the modal underneath it.
 export function ImageLightbox({ image, accent, onClose }: Props) {
   const reducedMotion = useReducedMotion();
   const containerRef = useFocusTrap<HTMLDivElement>(true);
 
   useEffect(() => {
-    // Listen on this lightbox's own focused container rather than the
-    // window. CommitModal has an equivalent Escape listener on window;
-    // capture:true previously jumped this handler ahead of it by forcing
-    // the capture phase, which runs before ANY bubble-phase listener on
-    // the page — including ones unrelated to this modal stack, which is
-    // where the leakage risk comes from. Attaching to the container
-    // instead relies on ordinary DOM tree flow: Escape fires while focus
-    // is trapped inside this element (see useFocusTrap), so the native
-    // event originates here and would bubble up through this node before
-    // it ever reaches CommitModal's window-level listener. Stopping
-    // propagation here is then just standard bubble-phase behavior, not
-    // a phase-jumping trick.
     const node = containerRef.current;
     if (!node) return;
     const onKey = (e: KeyboardEvent) => {
@@ -54,13 +38,6 @@ export function ImageLightbox({ image, accent, onClose }: Props) {
       className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-8"
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      // This wrapper is a transparent positioning container — it has no
-      // visible fill of its own, so animating its opacity does nothing
-      // visually. Its only job on exit is to keep AnimatePresence from
-      // tearing the whole tree down before the staggered children below
-      // (image out first, backdrop lingering after) finish their own
-      // exits, so it just holds for exactly as long as the slower of the
-      // two: the delayed backdrop.
       exit={{ opacity: 1 }}
       transition={{
         duration: reducedMotion ? 0.1 : BACKDROP_EXIT_DELAY + BACKDROP_EXIT_DURATION,
@@ -76,14 +53,6 @@ export function ImageLightbox({ image, accent, onClose }: Props) {
         exit={{ opacity: 0 }}
         transition={{
           duration: reducedMotion ? 0.1 : BACKDROP_EXIT_DURATION,
-          // The scrim holds a beat after the image has already left —
-          // that brief stretch of empty dark space is what gives the eye
-          // somewhere to rest before the rail reappears underneath it,
-          // rather than both surfaces dissolving in lockstep and leaving
-          // nothing for attention to land on mid-transition. It creates
-          // a sense of focal depth: image (foreground) recedes first,
-          // then the dark field (background) clears to reveal what's
-          // behind it, guiding the eye back toward the source rail.
           delay: reducedMotion ? 0 : BACKDROP_EXIT_DELAY,
         }}
       />
@@ -96,9 +65,6 @@ export function ImageLightbox({ image, accent, onClose }: Props) {
         className="relative max-h-[92vh] max-w-[96vw] sm:max-h-[90vh] sm:max-w-[90vw] outline-none"
         initial={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
-        // The image itself exits first and fast — no delay — so it reads
-        // as snapping back toward the rail it came from, ahead of the
-        // backdrop that's still holding the scene dark behind it.
         exit={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.95 }}
         transition={
           reducedMotion
