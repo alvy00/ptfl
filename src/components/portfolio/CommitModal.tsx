@@ -11,6 +11,8 @@ import { projects, type Project, type ProjectKey } from "@/data/portfolio/projec
 import { bugfixes, type BugfixKey } from "@/data/portfolio/bugfixes";
 import { AskProject } from "./AskProject";
 import { GlassSpecular, useGlassTilt } from "./useGlassTilt";
+import { ProjectImageScatter, ProjectImageStrip, type ProjectImage } from "./ProjectImageRail";
+import { ImageLightbox } from "./ImageLightbox";
 
 export type CommitSelection =
   | { kind: "feature"; projectKey: ProjectKey }
@@ -36,17 +38,17 @@ type Props = {
  * Mobile sheets carry slightly more damping (bigger, heavier surface);
  * desktop popovers are snappier (small, low-inertia UI).
  * ---------------------------------------------------------------------*/
-const modalSpring = { type: "spring", damping: 26, stiffness: 300 } as const;
+export const modalSpring = { type: "spring", damping: 26, stiffness: 300 } as const;
 const mobileSheetSpring = { type: "spring", damping: 28, stiffness: 300 } as const;
 const popoverSpring = { type: "spring", damping: 22, stiffness: 340 } as const;
-const REDUCED_MOTION_TRANSITION = { duration: 0.15, ease: "linear" as const };
+export const REDUCED_MOTION_TRANSITION = { duration: 0.15, ease: "linear" as const };
 
 /* -----------------------------------------------------------------------
  * useMediaQuery — replaces the one-shot `window.innerWidth < 640` check.
  * Reacts to resize/rotate and is SSR-safe (defaults to false on server,
  * corrected on mount before paint via useLayoutEffect).
  * ---------------------------------------------------------------------*/
-function useMediaQuery(query: string) {
+export function useMediaQuery(query: string) {
   const [matches, setMatches] = useState(false);
 
   useLayoutEffect(() => {
@@ -86,8 +88,12 @@ function useBodyScrollLock(active: boolean) {
  * useFocusTrap — locks Tab/Shift+Tab cycling inside the container while
  * mounted, focuses the first focusable element on open, and restores
  * focus to whatever triggered the modal when it closes.
+ *
+ * Exported so the lightbox (a separate top-layer surface stacked above
+ * the feature modal) gets the same trap/restore behavior instead of a
+ * second, slightly-different reimplementation.
  * ---------------------------------------------------------------------*/
-function useFocusTrap<T extends HTMLElement>(active: boolean) {
+export function useFocusTrap<T extends HTMLElement>(active: boolean) {
   const containerRef = useRef<T | null>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
 
@@ -107,17 +113,6 @@ function useFocusTrap<T extends HTMLElement>(active: boolean) {
 
     const raf = requestAnimationFrame(() => {
       const focusable = getFocusable();
-      // preventScroll matters here specifically: getFocusable() returns
-      // elements in DOM order, and in FeatureModal that means the first
-      // focusable element is usually the "Live Demo" link — which sits
-      // well below the fold, after the description/features/stack. Without
-      // preventScroll, focus()'s default browser behavior scrolls the
-      // nearest scrollable ancestor (the modal's own overflow-y-auto
-      // content div) to bring that link into view, so every modal opened
-      // already scrolled down instead of at the top. This keeps the
-      // accessibility behavior (focus still moves correctly for keyboard/
-      // screen-reader users) without also relocating the visible scroll
-      // position as a side effect.
       (focusable[0] ?? containerRef.current)?.focus({ preventScroll: true });
     });
 
@@ -141,11 +136,6 @@ function useFocusTrap<T extends HTMLElement>(active: boolean) {
     return () => {
       cancelAnimationFrame(raf);
       document.removeEventListener("keydown", onKeyDown);
-      // isConnected guards against restoring focus to an element that's
-      // since been removed from the DOM (e.g. the commit list re-rendered
-      // while this modal was open) — calling .focus() on a detached node
-      // is a silent no-op in most browsers but not guaranteed everywhere,
-      // so check first rather than relying on that being universally safe.
       const prev = previouslyFocused.current;
       if (prev?.isConnected) prev.focus();
     };
@@ -262,7 +252,7 @@ export function CommitModal({ selection, onClose }: Props) {
 /* -----------------------------------------------------------------------
  * Reusable close button — consistent active/focus states everywhere.
  * ---------------------------------------------------------------------*/
-function CloseButton({ onClose }: { onClose: () => void }) {
+export function CloseButton({ onClose }: { onClose: () => void }) {
   return (
     <button
       onClick={onClose}
@@ -469,6 +459,13 @@ function FeatureModal({
     { disabled: isMobile || Boolean(reducedMotion) },
   );
 
+  // Lightbox is a separate top-layer surface (z-[60], above this modal's
+  // z-50) so it can go full-bleed without being clipped by this modal's
+  // own overflow-hidden card, and so Escape/outside-click closes just the
+  // image instead of the whole feature modal underneath it.
+  const [activeImage, setActiveImage] = useState<ProjectImage | null>(null);
+  const images = project.images ?? [];
+
   return (
     <motion.div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 sm:p-6 md:p-8"
@@ -486,127 +483,169 @@ function FeatureModal({
           backdropFilter: "blur(14px) saturate(140%)",
         }}
       />
-      <motion.div
-        ref={containerRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={descId}
-        className="relative w-full max-w-2xl overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col outline-none"
-        initial={variants.initial}
-        animate={variants.animate}
-        exit={variants.exit}
-        transition={transition}
-        style={{ ...surfaceStyle(accent), ...tiltStyle }}
-        onAnimationComplete={markSettled}
-        {...handlers}
-        {...dragProps}
-      >
-        {dragEnabled && <DragHandle dragControls={dragControls} />}
-        <div className="overflow-y-auto flex-1 p-5 sm:p-8 md:p-9.5 custom-scrollbar overscroll-contain">
-          <div className="max-w-[62ch] mx-auto">
-            <div className="mb-1 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
-              project
-            </div>
-            <h3 id={titleId} className="text-lg sm:text-xl font-semibold text-white leading-tight">
-              {project.name}
-            </h3>
-            {selection.projectKey !== "assetverse" && (
-              <p className="mt-1 text-[11px] sm:text-[13px] text-gray-400">
-                {project.timeframe.label}
-              </p>
-            )}
-            <p
-              id={descId}
-              className="mt-3 text-[14px] sm:text-[15.5px] leading-relaxed text-gray-300 font-sans break-words"
-            >
-              {project.description}
-            </p>
-
-            <div className="mt-5">
-              <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
-                key features
+      {/* Un-clipped positioning root for the card + its floating rail.
+          The card itself needs overflow-hidden (rounded corners clip the
+          scrolling content edge-to-edge); the rail sits outside that card
+          as a sibling here so it isn't clipped along with it, while still
+          being positioned off this wrapper's right edge via left-full. */}
+      <div className="relative w-full max-w-2xl">
+        <motion.div
+          ref={containerRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={descId}
+          className="relative w-full overflow-hidden rounded-t-2xl sm:rounded-2xl font-mono max-h-[90vh] sm:max-h-[85vh] flex flex-col outline-none"
+          initial={variants.initial}
+          animate={variants.animate}
+          exit={variants.exit}
+          transition={transition}
+          style={{ ...surfaceStyle(accent), ...tiltStyle }}
+          onAnimationComplete={markSettled}
+          {...handlers}
+          {...dragProps}
+        >
+          {dragEnabled && <DragHandle dragControls={dragControls} />}
+          <div className="overflow-y-auto flex-1 p-5 sm:p-8 md:p-9.5 custom-scrollbar overscroll-contain">
+            <div className="max-w-[62ch] mx-auto">
+              <div className="mb-1 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
+                project
               </div>
-              <ul className="space-y-2">
-                {project.features.map((f) => (
-                  <li
-                    key={f.title}
-                    className="flex gap-2.5 text-[14.5px] sm:text-[15.5px] font-sans align-top"
-                  >
-                    <span
-                      className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ background: accent }}
-                    />
-                    <span className="text-gray-200 break-words">
-                      <span className="font-medium text-white">{f.title}</span>
-                      <span className="text-gray-400"> — {f.detail}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-5">
-              <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
-                stack
-              </div>
-              <div className="flex flex-wrap gap-1.5 sm:gap-2.5">
-                {project.stack.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border px-2.5 py-0.5 text-[11px] sm:text-[13px]"
-                    style={{
-                      borderColor: `${accent}44`,
-                      color: accent,
-                      background: `${accent}08`,
-                    }}
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-6 flex flex-wrap items-center gap-2">
-              <a
-                href={project.demoUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="rounded-md px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-transform hover:-translate-y-0.5 active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
-                style={{
-                  background: accent,
-                  color: "#0b0c10",
-                  boxShadow: `0 6px 20px ${accent}44`,
-                }}
+              <h3
+                id={titleId}
+                className="text-lg sm:text-xl font-semibold text-white leading-tight"
               >
-                Live Demo ↗
-              </a>
-              {project.codeLinks.map((link) => (
+                {project.name}
+              </h3>
+              {selection.projectKey !== "assetverse" && (
+                <p className="mt-1 text-[11px] sm:text-[13px] text-gray-400">
+                  {project.timeframe.label}
+                </p>
+              )}
+              <p
+                id={descId}
+                className="mt-3 text-[14px] sm:text-[15.5px] leading-relaxed text-gray-300 font-sans break-words"
+              >
+                {project.description}
+              </p>
+
+              {/* Mobile/no-margin fallback: no backdrop space exists beside a
+                full-width bottom sheet, so screenshots render inline as a
+                horizontal strip here instead of floating. On desktop this
+                block collapses to nothing (rail below handles it via
+                `sm:hidden` on itself would be wrong — instead the rail is
+                `sm:absolute` so it leaves normal flow entirely above
+                sm, and this inline copy is the one that's visible there). */}
+              {images.length > 0 && (
+                <div className="mt-5 sm:hidden">
+                  <div className="mb-2 text-[11px] uppercase tracking-widest text-gray-500">
+                    screenshots
+                  </div>
+                  <ProjectImageStrip images={images} accent={accent} onSelect={setActiveImage} />
+                </div>
+              )}
+
+              <div className="mt-5">
+                <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
+                  key features
+                </div>
+                <ul className="space-y-2">
+                  {project.features.map((f) => (
+                    <li
+                      key={f.title}
+                      className="flex gap-2.5 text-[14.5px] sm:text-[15.5px] font-sans align-top"
+                    >
+                      <span
+                        className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full"
+                        style={{ background: accent }}
+                      />
+                      <span className="text-gray-200 break-words">
+                        <span className="font-medium text-white">{f.title}</span>
+                        <span className="text-gray-400"> — {f.detail}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <div className="mt-5">
+                <div className="mb-2 text-[11px] sm:text-[13px] uppercase tracking-widest text-gray-500">
+                  stack
+                </div>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2.5">
+                  {project.stack.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded-full border px-2.5 py-0.5 text-[11px] sm:text-[13px]"
+                      style={{
+                        borderColor: `${accent}44`,
+                        color: accent,
+                        background: `${accent}08`,
+                      }}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-wrap items-center gap-2">
                 <a
-                  key={link.url}
-                  href={link.url}
+                  href={project.demoUrl}
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="rounded-md border px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-gray-200 transition-colors hover:text-white active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                  className="rounded-md px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium transition-transform hover:-translate-y-0.5 active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
                   style={{
-                    borderColor: `${accent}44`,
-                    background: "rgba(255,255,255,0.01)",
+                    background: accent,
+                    color: "#0b0c10",
+                    boxShadow: `0 6px 20px ${accent}44`,
                   }}
                 >
-                  {project.codeLinks.length > 1 ? link.label : "View Code"} ↗
+                  Live Demo ↗
                 </a>
-              ))}
+                {project.codeLinks.map((link) => (
+                  <a
+                    key={link.url}
+                    href={link.url}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="rounded-md border px-3.5 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-gray-200 transition-colors hover:text-white active:scale-95 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900"
+                    style={{
+                      borderColor: `${accent}44`,
+                      background: "rgba(255,255,255,0.01)",
+                    }}
+                  >
+                    {project.codeLinks.length > 1 ? link.label : "View Code"} ↗
+                  </a>
+                ))}
+              </div>
+
+              <div className="mt-2 w-full border-t border-white/[0.04]" />
+              <AskProject projectKey={selection.projectKey} accent={accent} />
             </div>
-
-            <div className="mt-2 w-full border-t border-white/[0.04]" />
-            <AskProject projectKey={selection.projectKey} accent={accent} />
           </div>
-        </div>
 
-        <CloseButton onClose={onClose} />
-        <GlassSpecular x={specXPct} y={specYPct} accent={accent} active={active} />
-      </motion.div>
+          <CloseButton onClose={onClose} />
+          <GlassSpecular x={specXPct} y={specYPct} accent={accent} active={active} />
+        </motion.div>
+
+        {/* Desktop-only floating rail — a sibling of the card, not a
+            child, so the card's overflow-hidden can't clip it. Positioned
+            off this wrapper's right edge (wrapper matches the card's own
+            width, so left-full lands exactly at the card's right border). */}
+        {images.length > 0 && (
+          <div className="hidden sm:block sm:absolute sm:left-full sm:top-2 sm:ml-8">
+            <ProjectImageScatter images={images} accent={accent} onSelect={setActiveImage} />
+          </div>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {activeImage && (
+          <ImageLightbox image={activeImage} accent={accent} onClose={() => setActiveImage(null)} />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -655,10 +694,6 @@ function SimplePopover({
   const dragControls = useDragControls();
   const dragEnabled = isMobile && !reducedMotion;
 
-  // Viewport-safe placement: clamps horizontally AND vertically, and flips
-  // to the opposite side of the anchor when the default side would clip
-  // off the right or bottom edge (e.g. commits near the far edge of the
-  // graph), instead of just sliding along the edge and covering the node.
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
 
   useLayoutEffect(() => {
@@ -667,35 +702,22 @@ function SimplePopover({
       return;
     }
     const POPOVER_WIDTH = 370;
-    // Used only as a fallback for the one edge case where containerRef
-    // somehow isn't attached yet when this runs (shouldn't happen in
-    // practice — refs attach during commit, before layout effects fire —
-    // but getBoundingClientRect() on a null ref would throw, so this is
-    // the safety net, not the primary source of truth anymore).
     const FALLBACK_HEIGHT_ESTIMATE = 140;
     const margin = 16;
 
     let left = anchorX + 24;
     if (left + POPOVER_WIDTH > window.innerWidth - margin) {
-      left = anchorX - POPOVER_WIDTH - 24; // flip to the left of the anchor
+      left = anchorX - POPOVER_WIDTH - 24;
     }
     left = Math.min(Math.max(margin, left), window.innerWidth - POPOVER_WIDTH - margin);
 
-    // Real measured height, not a guess — by this point containerRef is
-    // already mounted with its actual content (hash + commit message),
-    // so its rendered height reflects real text length/wrapping instead
-    // of assuming every commit message fits inside one fixed estimate.
-    // This matters because a longer commit message wrapping to 2-3 lines
-    // could exceed a fixed guess and clip off the bottom edge — measuring
-    // means the vertical clamp below is always accurate to what's
-    // actually being placed, regardless of message length.
     const measuredHeight = containerRef.current?.getBoundingClientRect().height;
     const popoverHeight =
       measuredHeight && measuredHeight > 0 ? measuredHeight : FALLBACK_HEIGHT_ESTIMATE;
 
     let top = anchorY - 24;
     if (top + popoverHeight > window.innerHeight - margin) {
-      top = window.innerHeight - popoverHeight - margin; // push up off the bottom edge
+      top = window.innerHeight - popoverHeight - margin;
     }
     top = Math.max(margin, top);
 

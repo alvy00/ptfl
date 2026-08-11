@@ -2,6 +2,8 @@ export type ProjectKey = "auctasync" | "assetverse" | "asynclangai" | "careerpil
 
 export type CodeLink = { label: string; url: string };
 
+export type ProjectImage = { id: string; src: string; alt: string };
+
 export type Project = {
   key: ProjectKey;
   name: string;
@@ -12,6 +14,7 @@ export type Project = {
   demoUrl: string;
   codeLinks: CodeLink[];
   accent: string; // hex, matches branch color
+  images?: ProjectImage[]; // screenshots shown in the modal's image rail — no fixed cap
 };
 
 export const projects: Record<ProjectKey, Project> = {
@@ -65,6 +68,10 @@ export const projects: Record<ProjectKey, Project> = {
       { label: "View Code", url: "https://github.com/alvy00/asyncawait-auction-project-v2" },
     ],
     accent: "#f59e0b",
+    images: [
+      // { id: "1", src: "/screenshots/auctasync/hero.png", alt: "AuctaSync live auction hero screen" },
+      // { id: "2", src: "/screenshots/auctasync/bidding.png", alt: "Live bidding view with real-time updates" },
+    ],
   },
   assetverse: {
     key: "assetverse",
@@ -116,6 +123,43 @@ export const projects: Record<ProjectKey, Project> = {
       { label: "Server", url: "https://github.com/alvy00/ph-assetverse-server-a11" },
     ],
     accent: "#a78bfa",
+    images: [
+      {
+        id: "1",
+        src: "/assetverse/assetverse-home.png",
+        alt: "AssetVerse home page",
+      },
+      {
+        id: "2",
+        src: "/assetverse/assetverse-login.png",
+        alt: "Assetverse login page",
+      },
+      {
+        id: "3",
+        src: "/assetverse/assetverse-3.png",
+        alt: "AssetVerse HR dashboard with company asset overview",
+      },
+      {
+        id: "4",
+        src: "/assetverse/assetverse-4.png",
+        alt: "Asset inventory list with returnable/non-returnable status",
+      },
+      {
+        id: "5",
+        src: "/assetverse/assetverse-5.png",
+        alt: "AssetVerse HR dashboard with company asset overview",
+      },
+      {
+        id: "6",
+        src: "/assetverse/assetverse-6.png",
+        alt: "Asset inventory list with returnable/non-returnable status",
+      },
+      {
+        id: "7",
+        src: "/assetverse/assetverse-7.png",
+        alt: "AssetVerse HR dashboard with company asset overview",
+      },
+    ],
   },
   asynclangai: {
     key: "asynclangai",
@@ -164,6 +208,7 @@ export const projects: Record<ProjectKey, Project> = {
     demoUrl: "https://asynclangai.vercel.app/",
     codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/LangAI" }],
     accent: "#38bdf8",
+    images: [],
   },
   careerpilot: {
     key: "careerpilot",
@@ -214,6 +259,7 @@ export const projects: Record<ProjectKey, Project> = {
     demoUrl: "https://careerpilotasync.vercel.app/",
     codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/eg-careerpilot-asyncawait" }],
     accent: "#34d399",
+    images: [],
   },
 };
 
