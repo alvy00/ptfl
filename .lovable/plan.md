@@ -41,3 +41,7 @@ Headline is confirmed. I will draft new one-sentence, outcome-first blurbs for e
 - No new display font is loaded — headlines use the existing sans stack at weight 700 with tight tracking. Mono is demoted to eyebrows, dates, and tags only.
 - Accordion height animates via an `AnimatePresence` height/opacity wrapper; `aria-expanded` / `aria-controls` wiring is carried over.
 - Accessibility preserved throughout: visible focus rings on every interactive element, `rel="noopener noreferrer"` on external links, 44px minimum touch target on the mobile accordion toggle.
+
+## Existing type errors fixed along the way
+
+The build currently fails on three pre-existing type errors. Two are inside the Overview component and disappear with the rebuild (`layoutTransition` is not a valid Framer Motion prop; `ease: "steps(1)"` is not a valid easing). The third is in `src/components/portfolio/StatsPanel.tsx` — a hover variant whose `transition.type` widens to `string` instead of the literal `"spring"`; I will add the `as const` fix there as a one-line correction so the build passes.
