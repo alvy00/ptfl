@@ -57,6 +57,11 @@ const OUTCOME_COPY: Record<ProjectKey, string> = {
 
 const ACCENT = "#FF6B4A";
 
+// The page shell sets font-mono globally for the terminal/graph tab; this tab
+// is editorial, so it resets to a humanist sans and demotes mono to labels.
+const SANS =
+  'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+
 function useMotionSafe() {
   const reduceMotion = useReducedMotion() ?? false;
   return {
@@ -394,7 +399,10 @@ export function GitGraphOverview() {
   }, []);
 
   return (
-    <div className="font-sans mx-auto flex max-w-6xl flex-col gap-14 px-4 py-10 sm:px-6 sm:py-14">
+    <div
+      className="font-sans mx-auto flex max-w-6xl flex-col gap-14 px-4 py-10 sm:px-6 sm:py-14"
+      style={{ fontFamily: SANS }}
+    >
       {/* A. Header */}
       <header className="flex flex-col gap-7">
         <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[#8A8D94]">
