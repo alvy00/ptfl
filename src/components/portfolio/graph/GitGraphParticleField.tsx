@@ -4,19 +4,35 @@ import type { RefObject } from "react";
 import {
   activeBoxLeftX,
   activeBoxVerticalRange,
+  bugfixTrackX,
   featureTrackX,
   IGNITION_TIMING,
   type GeometryBranch,
+  type GeometryBugfixBranch,
 } from "@/lib/portfolio/gitGraphGeometry";
 import type { Layout } from "@/lib/portfolio/gitGraphTypes";
 
+type IgnitionKind = "feature" | "bugfix";
+
 /**
  * Ambient background canvas: a handful of slow-drifting particles filling
- * the dead space beside the graph, plus — only when a branch is focused
- * (hover or scroll-auto-focus, same `focusedBranch` that already drives
- * dimming and GitGraphActiveBorder) — a soft connector line from the
- * trunk out to that branch's active-border box, with a light that travels
- * along it once per focus-in and fires `onImpact` the moment it lands.
+ * the dead space beside the graph, plus — only when a branch OR a bugfix
+ * is focused (hover or scroll-auto-focus for branches; hover-only for
+ * bugfixes, same state that already drives dimming and
+ * GitGraphActiveBorder) — a soft connector line out to that target's
+ * active-border box, with a light that travels along it once per focus-in
+ * and fires `onImpact` the moment it lands.
+ *
+ * v6 — bugfix parity: this used to only ever receive `branches` (feature),
+ * so a focused bugfix never got a connector/particle at all — its border
+ * had no impact to gate on and fired straight from focus instead (see
+ * GitGraphActiveBorder's `instant`-less-but-immediate bugfix path). Now
+ * takes `bugfixBranches` too; whichever array a focused name is found in
+ * decides the track x (featureTrackX vs bugfixTrackX) and the active-box
+ * kind ("feature" vs "bugfix") used for targeting. GitGraph.tsx is
+ * responsible for resolving *which* name to focus — a bugfix's own name
+ * when a bugfix commit is specifically hovered, not its parent branch's —
+ * this component just draws whichever target it's handed.
  *
  * v5 — three refinements from review:
  * - **Debounced launch**: a newly-focused branch no longer restarts travel
@@ -41,13 +57,13 @@ import type { Layout } from "@/lib/portfolio/gitGraphTypes";
  * dt*0.35) % 1`), which reads fine as ambient motion but can't drive a
  * "particle hits border, border ignites" chain reaction: a light that
  * never stops never has a single moment of impact to key off of. It's now
- * a one-shot per focus session — restarts from 0 whenever `focusedBranch`
- * changes to a new branch, runs to completion once, and calls `onImpact`
- * exactly once when it does. The static connector curve itself is
- * unchanged and still just sits there ambiently regardless.
+ * a one-shot per focus session — restarts from 0 whenever the focused
+ * target changes, runs to completion once, and calls `onImpact` exactly
+ * once when it does. The static connector curve itself is unchanged and
+ * still just sits there ambiently regardless.
  *
  * The impact point (both the light's destination and what GitGraph.tsx
- * passes as `active` to GitGraphActiveBorder) now reads from
+ * passes as `active` to GitGraphActiveBorder) reads from
  * gitGraphGeometry.ts's `activeBoxLeftX`/`activeBoxVerticalRange` — the
  * same helpers the actual border box's real geometry is built from — so
  * the light always lands exactly on the border's left edge, not on an
@@ -56,6 +72,7 @@ import type { Layout } from "@/lib/portfolio/gitGraphTypes";
 export function GitGraphParticleField({
   containerRef,
   branches,
+  bugfixBranches,
   layout,
   graphW,
   focusedBranch,
@@ -66,8 +83,13 @@ export function GitGraphParticleField({
 }: {
   containerRef: RefObject<HTMLDivElement | null>;
   branches: GeometryBranch[];
+  bugfixBranches: GeometryBugfixBranch[];
   layout: Layout;
   graphW: number;
+  /** Name of whichever branch OR bugfix is currently focused — GitGraph.tsx
+   *  resolves this to the bugfix's own name when a bugfix is specifically
+   *  hovered, not its parent branch's, so this always identifies a single
+   *  real target to ignite rather than being ambiguous between the two. */
   focusedBranch: string | undefined;
   /** Same tier-derived scale every node/radius in the graph already uses
    *  (layout.nodeScale in GitGraph.tsx) — keeps the traveling light and its
@@ -76,13 +98,13 @@ export function GitGraphParticleField({
   nodeScale: number;
   reduceMotion: boolean;
   isCoarsePointer: boolean;
-  /** Fired once per (re-)focus, the moment this branch's border should
-   *  ignite. `instant=false` the first time this branch ever ignites this
+  /** Fired once per (re-)focus, the moment this target's border should
+   *  ignite. `instant=false` the first time this target ever ignites this
    *  mount (a real particle just landed); `instant=true` on every later
    *  re-focus, where there's no connector/travel at all and the border
    *  should pop straight to sealed with no draw-in animation either — see
    *  GitGraphActiveBorder's `instant` prop. */
-  onImpact?: (branchName: string, instant: boolean) => void;
+  onImpact?: (name: string, instant: boolean) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Mutable "latest props" refs — the rAF loop reads these every frame
@@ -90,12 +112,14 @@ export function GitGraphParticleField({
   // scroll-driven re-render. Only the mount/unmount effect below (gated by
   // reduceMotion/isCoarsePointer) actually starts or stops the loop.
   const branchesRef = useRef<GeometryBranch[]>(branches);
+  const bugfixBranchesRef = useRef<GeometryBugfixBranch[]>(bugfixBranches);
   const layoutRef = useRef(layout);
   const graphWRef = useRef(graphW);
   const focusedRef = useRef(focusedBranch);
   const nodeScaleRef = useRef(nodeScale);
   const onImpactRef = useRef(onImpact);
   branchesRef.current = branches;
+  bugfixBranchesRef.current = bugfixBranches;
   layoutRef.current = layout;
   graphWRef.current = graphW;
   focusedRef.current = focusedBranch;
@@ -218,12 +242,34 @@ export function GitGraphParticleField({
       return [(dx / dist) * pull, (dy / dist) * pull];
     };
 
+    // Finds the focused name in either array — whichever one it's in
+    // decides the track x and active-box kind used below. Feature checked
+    // first; names are expected unique across both (same assumption the
+    // rest of the graph already makes — allNodes/branchGroup keys off
+    // names from both arrays into one flat namespace too).
+    const findTarget = (
+      name: string | undefined,
+    ): { data: GeometryBranch | GeometryBugfixBranch; kind: IgnitionKind } | undefined => {
+      if (!name) return undefined;
+      const feature = branchesRef.current.find((b) => b.name === name);
+      if (feature) return { data: feature, kind: "feature" };
+      const bugfix = bugfixBranchesRef.current.find((b) => b.name === name);
+      if (bugfix) return { data: bugfix, kind: "bugfix" };
+      return undefined;
+    };
+
     // Reads from gitGraphGeometry.ts's shared active-box helpers — the same
     // ones the real border box in GitGraph.tsx is built from — so this
     // lands exactly on the border's left edge, at its vertical center,
-    // instead of the old independently-approximated point.
-    const impactPoint = (b: GeometryBranch, gW: number): { x: number; y: number } => {
-      const { top, bottom } = activeBoxVerticalRange(b.sourceY, b.mergeY, "feature");
+    // instead of an independently-approximated point. `kind` picks feature
+    // vs bugfix box clearances (ACTIVE_BOX.feature/.bugfix differ).
+    const impactPoint = (
+      sourceY: number,
+      mergeY: number,
+      kind: IgnitionKind,
+      gW: number,
+    ): { x: number; y: number } => {
+      const { top, bottom } = activeBoxVerticalRange(sourceY, mergeY, kind);
       return { x: activeBoxLeftX(gW), y: (top + bottom) / 2 };
     };
 
@@ -232,10 +278,10 @@ export function GitGraphParticleField({
     let last = performance.now();
     let travelT = 0; // 0..1 progress of the traveling light along the connector curve, one-shot per focus-in
     let travelDone = false;
-    let travelBranch: string | null = null; // which branch the current travelT belongs to
+    let travelBranch: string | null = null; // which target the current travelT belongs to
     let pathFade = 1; // 1 = connector path fully visible, ramps to 0 after impact
 
-    // Debounce: a candidate branch has to hold focus for
+    // Debounce: a candidate target has to hold focus for
     // IGNITION_TIMING.focusDebounce before it's actually committed as
     // travelBranch and gets a launch. Without this, a fast scroll-through
     // (focusedBranch flipping every tick) restarted the particle from zero
@@ -243,15 +289,15 @@ export function GitGraphParticleField({
     let candidateBranch: string | null = null;
     let candidateSince = 0;
 
-    // Replay-once: branches that have already completed a full travel this
+    // Replay-once: targets that have already completed a full travel this
     // mount skip straight to "landed" on every later re-focus, so quickly
-    // hovering in and out of the same branch doesn't replay the full
-    // flight every single time.
+    // hovering in and out of the same branch/bugfix doesn't replay the
+    // full flight every single time.
     const impactedOnce = new Set<string>();
 
     // Short fading trail behind the traveling light — reads as "energy,"
     // not "a ball bouncing along a wire." Cleared whenever travelBranch
-    // resets so a new launch doesn't drag in the previous branch's tail.
+    // resets so a new launch doesn't drag in the previous target's tail.
     const TRAIL_LENGTH = 5;
     let trail: { x: number; y: number }[] = [];
 
@@ -286,10 +332,12 @@ export function GitGraphParticleField({
         ctx.fill();
       }
 
-      // --- connector line to the focused branch only ---
-      const branch = branchesRef.current.find((b) => b.name === focusedRef.current);
-      if (branch) {
-        // Debounce: only actually commit to launching a new branch once
+      // --- connector line to the focused branch or bugfix only ---
+      const target = findTarget(focusedRef.current);
+      if (target) {
+        const { data: branch, kind } = target;
+
+        // Debounce: only actually commit to launching a new target once
         // it's held focus for focusDebounce. A fast scroll-through can
         // flip focusedBranch every tick; without this the candidate below
         // would just keep getting reset before ever finishing.
@@ -303,7 +351,7 @@ export function GitGraphParticleField({
           travelBranch = branch.name;
           trail = [];
           if (impactedOnce.has(branch.name)) {
-            // Seen this branch complete a full travel already this mount —
+            // Seen this target complete a full travel already this mount —
             // this re-focus gets NO particle/connector at all (not even a
             // fading one; pathFade starts at 0, not 1) and reports impact
             // immediately with instant=true, which GitGraph.tsx forwards
@@ -326,23 +374,22 @@ export function GitGraphParticleField({
         // Nothing to draw yet if we're still inside the debounce window
         // for a brand-new candidate (travelBranch hasn't caught up to
         // `branch` yet) — better to render nothing for one tick than draw
-        // the new branch's geometry against stale travel state.
+        // the new target's geometry against stale travel state.
         if (travelBranch !== branch.name) {
           // fall through to particles-only frame below
         } else {
           const ly = layoutRef.current;
-          // Launch point: the actual commit node nearest the branch's
+          // Launch point: the actual commit node nearest the target's
           // vertical center, not the empty midpoint between sourceY/mergeY.
-          // Previously this was `{ x: mainX + branch.lane*laneW, y:
-          // (sourceY+mergeY)/2 }` — a point that generally lands in the gap
-          // between two commit rows (visible as a stray dot floating on the
-          // track in review) AND used branch.lane directly for x, which
-          // (per the comment on FEATURE_X in gitGraphGeometry.ts) isn't the
-          // branch's real rendered x — every feature branch renders at the
-          // same FEATURE_X regardless of lane. featureTrackX(ly) matches
-          // that exactly, so the launch x now lines up with the branch's
-          // actual line/nodes.
-          const trackX = featureTrackX(ly) + graphLeftInset;
+          // trackX picks feature vs bugfix rail — a bugfix target must
+          // launch from its own (further-right) rail, not the feature
+          // track, or the connector would visibly start from the wrong
+          // line. featureTrackX/bugfixTrackX both match the branch's real
+          // rendered x exactly, same reasoning as the feature-only version
+          // of this comment: `branch.lane` is only a slot index, not a
+          // physical offset, for either kind.
+          const trackX =
+            (kind === "feature" ? featureTrackX(ly) : bugfixTrackX(ly)) + graphLeftInset;
           const branchMidY = (branch.sourceY + branch.mergeY) / 2;
           const commitYs = branch.commits.map((c) => ly.topPad + c.row * ly.rowH);
           const anchorY = commitYs.reduce(
@@ -350,14 +397,14 @@ export function GitGraphParticleField({
             commitYs[0] ?? branchMidY,
           );
           const anchor = { x: trackX, y: anchorY };
-          const target = impactPoint(branch, graphWRef.current);
+          const targetPoint = impactPoint(branch.sourceY, branch.mergeY, kind, graphWRef.current);
 
           // Control point at the curve's midpoint, with a fixed gentle bow —
           // no cursor influence here. A static, predictable curve reads as
           // "ambient decoration"; one that reacts to the reader's own cursor
           // while they're hovering/clicking rows would compete with them.
-          const midX = (anchor.x + target.x) / 2;
-          const midY = (anchor.y + target.y) / 2;
+          const midX = (anchor.x + targetPoint.x) / 2;
+          const midY = (anchor.y + targetPoint.y) / 2;
           const ctrlX = midX;
           const ctrlY = midY - 10; // slight natural upward bow
 
@@ -372,7 +419,7 @@ export function GitGraphParticleField({
           if (pathFade > 0) {
             ctx.beginPath();
             ctx.moveTo(anchor.x, anchor.y);
-            ctx.quadraticCurveTo(ctrlX, ctrlY, target.x, target.y);
+            ctx.quadraticCurveTo(ctrlX, ctrlY, targetPoint.x, targetPoint.y);
             ctx.strokeStyle = branch.color;
             ctx.globalAlpha = 0.2 * pathFade; // 0.2 matches the old flat `${color}33` opacity
             ctx.lineWidth = 1.25;
@@ -397,9 +444,13 @@ export function GitGraphParticleField({
             const t = travelT;
             const oneMinusT = 1 - t;
             const tx =
-              oneMinusT * oneMinusT * anchor.x + 2 * oneMinusT * t * ctrlX + t * t * target.x;
+              oneMinusT * oneMinusT * anchor.x +
+              2 * oneMinusT * t * ctrlX +
+              t * t * targetPoint.x;
             const ty =
-              oneMinusT * oneMinusT * anchor.y + 2 * oneMinusT * t * ctrlY + t * t * target.y;
+              oneMinusT * oneMinusT * anchor.y +
+              2 * oneMinusT * t * ctrlY +
+              t * t * targetPoint.y;
             const glowAlpha = Math.sin(t * Math.PI); // fades in/out over the traversal, not a hard pop at the ends
 
             // Trail: remember the last few head positions and draw each at
@@ -473,9 +524,10 @@ export function GitGraphParticleField({
       container.removeEventListener("mouseleave", onMouseLeave);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-    // Deliberately NOT depending on branches/layout/focusedBranch/onImpact —
-    // those flow through the refs above so a focus change never tears down
-    // and restarts the canvas/loop/listeners, only the mount-gating props do.
+    // Deliberately NOT depending on branches/bugfixBranches/layout/
+    // focusedBranch/onImpact — those flow through the refs above so a
+    // focus change never tears down and restarts the canvas/loop/
+    // listeners, only the mount-gating props do.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduceMotion, isCoarsePointer, containerRef]);
 

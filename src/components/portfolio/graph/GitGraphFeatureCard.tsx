@@ -12,11 +12,26 @@ import { GitGraphCornerBrackets } from "./GitGraphCornerBrackets";
  * active-border and corner-bracket feedback layered on top of it. One
  * delegated handler here replaces N identical per-row handlers that used
  * to live on every commit row in this branch.
+ *
+ * v6: border and brackets now read two DIFFERENT signals on purpose.
+ * - Border: `isFocused` (from GitGraph.tsx's `focusedBranch`), which
+ *   includes scroll-driven auto-focus — this is the "active project as
+ *   you scroll past it" indicator, unchanged from before.
+ * - Brackets: `isHovered`, explicit hover/focus-visible only, no scroll.
+ *   Brackets used to run on `active="group"` (pure CSS, also hover-only)
+ *   independent of the particle-impact chain, so they popped instantly
+ *   and out of sync with the border. Switching them to also read
+ *   impact state fixed that sync but temporarily made them pick up
+ *   scroll-auto-focus too, since `isFocused` was the only signal in
+ *   scope — `isHovered` is the narrower one that avoids that.
+ * Both still get ANDed with `impactedBranch === b.name` so hover and
+ * scroll-focus alike wait for the same particle-impact gate.
  */
 export function GitGraphFeatureCard({
   b,
   projectName,
   isFocused,
+  isHovered,
   impactedBranch,
   instantBorderKey,
   reduceMotion,
@@ -27,6 +42,7 @@ export function GitGraphFeatureCard({
   b: GeometryBranch;
   projectName: string;
   isFocused: boolean;
+  isHovered: boolean;
   impactedBranch: string | null;
   instantBorderKey: string | null;
   reduceMotion: boolean;
@@ -35,6 +51,8 @@ export function GitGraphFeatureCard({
   unfocusBranch: (group: string) => void;
 }) {
   const { top, bottom } = activeBoxVerticalRange(b.sourceY, b.mergeY, "feature");
+  const borderIgnited = isFocused && impactedBranch === b.name;
+  const cornersIgnited = isHovered && impactedBranch === b.name;
 
   // Skips focusBranch when the focus came from useFocusTrap's silent
   // modal-close restoration (data-suppress-focus-highlight) — otherwise
@@ -71,12 +89,12 @@ export function GitGraphFeatureCard({
       }}
     >
       <GitGraphActiveBorder
-        active={isFocused && impactedBranch === b.name}
+        active={borderIgnited}
         color={b.color}
         reduceMotion={reduceMotion}
         instant={instantBorderKey === b.name}
       />
-      <GitGraphCornerBrackets active="group" color={b.color} />
+      <GitGraphCornerBrackets active={cornersIgnited} color={b.color} />
     </div>
   );
 }

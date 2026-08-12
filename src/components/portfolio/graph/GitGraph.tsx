@@ -59,9 +59,10 @@ export function GitGraph({
   );
   const branchHoverTimeout = useRef<number | undefined>(undefined);
 
-  // Which feature branch the particle connector's light has actually
-  // landed on (set by GitGraphParticleField's onImpact) — gates the
-  // border's draw-in so it doesn't fire before the particle arrives.
+  // Which target (a feature branch's name, OR — v6 — a bugfix's own name)
+  // the particle connector's light has actually landed on (set by
+  // GitGraphParticleField's onImpact) — gates the border's draw-in so it
+  // doesn't fire before the particle arrives.
   const [impactedBranch, setImpactedBranch] = useState<string | null>(null);
   // Whether the most recent impact for `impactedBranch` was a replay
   // (instant=true) rather than a real landing, forwarded to
@@ -218,22 +219,33 @@ export function GitGraph({
   const isDimmed = (group: string) =>
     Boolean(focusedBranch) && group !== "main" && group !== focusedBranch;
 
+  // Scroll-driven auto-focus never targets a bugfix specifically; only an
+  // explicit hover on a bugfix commit sets this.
+  const focusedBugfixKey = hoveredFocus?.bugfixKey;
+
+  // v6: what the particle system should actually ignite. `focusedBranch`
+  // stays branch-group-based on purpose — dimming needs the parent branch
+  // to stay lit while a nested bugfix is hovered — but the particle/border
+  // chain needs the bugfix's OWN name so it targets the bugfix's own rail
+  // and box, not its parent's. Falls back to focusedBranch itself when no
+  // bugfix is specifically focused (the previous, feature-only behavior).
+  const focusedBugfix = focusedBugfixKey
+    ? bugfixBranches.find((bf) => bf.bugfixKey === focusedBugfixKey)
+    : undefined;
+  const ignitionTarget = focusedBugfix?.name ?? focusedBranch;
+
   useEffect(() => {
-    setImpactedBranch((current) => (current && current !== focusedBranch ? null : current));
-  }, [focusedBranch]);
+    setImpactedBranch((current) => (current && current !== ignitionTarget ? null : current));
+  }, [ignitionTarget]);
 
   // GitGraphParticleField mounts nothing when reduceMotion/isCoarsePointer
-  // is true, so its onImpact callback never fires. Treat a branch as
+  // is true, so its onImpact callback never fires. Treat a target as
   // impacted the instant it's focused instead, bypassing the connect ->
   // impact chain — otherwise hover/focus gets zero visual acknowledgment.
   useEffect(() => {
     if (!(reduceMotion || isCoarsePointer)) return;
-    setImpactedBranch(focusedBranch ?? null);
-  }, [reduceMotion, isCoarsePointer, focusedBranch]);
-
-  // Scroll-driven auto-focus never targets a bugfix specifically; only an
-  // explicit hover on a bugfix commit sets this.
-  const focusedBugfixKey = hoveredFocus?.bugfixKey;
+    setImpactedBranch(ignitionTarget ?? null);
+  }, [reduceMotion, isCoarsePointer, ignitionTarget]);
 
   const focusedColor = focusedBranch
     ? (BRANCH_DEFS.find((b) => b.name === focusedBranch)?.color ?? null)
@@ -259,9 +271,10 @@ export function GitGraph({
         <GitGraphParticleField
           containerRef={containerRef}
           branches={branches}
+          bugfixBranches={bugfixBranches}
           layout={layout}
           graphW={graphW}
-          focusedBranch={focusedBranch}
+          focusedBranch={ignitionTarget}
           nodeScale={nodeScale}
           reduceMotion={reduceMotion}
           isCoarsePointer={isCoarsePointer}
@@ -357,14 +370,23 @@ export function GitGraph({
         </svg>
 
         {/* Sized to each branch's own row span so it re-derives
-            automatically when the tier changes. `active` reuses the same
-            focusedBranch state that drives dimming. */}
+            automatically when the tier changes. `active`/`isFocused` reuse
+            the same focusedBranch/focusedBugfixKey state that drives
+            dimming. */}
         <div
           className="absolute inset-y-0 right-4 sm:right-10 pointer-events-none"
           style={{ left: `calc(${graphW}px + ${textColumnGapPx}px)` }}
         >
           {branches.map((b) => {
             const isFocused = focusedBranch === b.name && !focusedBugfixKey;
+            // Corner brackets are hover-only (mirrors GitGraphBugfixBox,
+            // whose focus signal is inherently hover-only — scroll
+            // auto-focus never sets focusedBugfixKey). `isFocused` above
+            // includes scroll-driven auto-focus on purpose (that's what
+            // lights up the border as the reader scrolls past), but that
+            // same signal made brackets pop for cards that were merely
+            // scrolled into view rather than actually hovered/focused.
+            const isHovered = hoveredFocus?.group === b.name && !hoveredFocus?.bugfixKey;
             const projectName = projects[b.projectKey].name.split(" — ")[0];
             return (
               <GitGraphFeatureCard
@@ -372,6 +394,7 @@ export function GitGraph({
                 b={b}
                 projectName={projectName}
                 isFocused={isFocused}
+                isHovered={isHovered}
                 impactedBranch={impactedBranch}
                 instantBorderKey={instantBorderKey}
                 reduceMotion={reduceMotion}
@@ -386,7 +409,9 @@ export function GitGraph({
               key={`border-${b.name}`}
               b={b}
               title={bugfixes[b.bugfixKey].title}
-              active={focusedBranch === b.branchGroup && focusedBugfixKey === b.bugfixKey}
+              isFocused={focusedBugfixKey === b.bugfixKey}
+              impactedBranch={impactedBranch}
+              instantBorderKey={instantBorderKey}
               reduceMotion={reduceMotion}
               focusBranch={focusBranch}
               unfocusBranch={unfocusBranch}

@@ -25,6 +25,12 @@ export function featureTrackX(layout: Layout): number {
 // can reserve exactly this much width instead of hand-typing "3.25" twice.
 const BUGFIX_LANE = 3.25;
 
+// Bugfix equivalent of featureTrackX — GitGraphParticleField needs this to
+// target bugfix branches too, not just feature ones.
+export function bugfixTrackX(layout: Layout): number {
+  return layout.mainX + BUGFIX_LANE * layout.laneW;
+}
+
 /** All pixel geometry derived from a Layout — rebuilt only when the tier changes. */
 export function buildGeometry(layout: Layout) {
   const { rowH, topPad, mainX, laneW } = layout;
@@ -251,6 +257,14 @@ export function activeBoxVerticalRange(
  *  `buildGeometry(layout).branches` — exported so consumers like
  *  GitGraphParticleField can import the type instead of duplicating it. */
 export type GeometryBranch = ReturnType<typeof buildGeometry>["branches"][number];
+
+/** Bugfix equivalent of GeometryBranch — an element of
+ *  `buildGeometry(layout).bugfixBranches`. Exported for the same reason:
+ *  GitGraphParticleField and GitGraphBugfixBox both need the real shape
+ *  instead of each re-declaring their own (previously GitGraphBugfixBox
+ *  hand-rolled this as `BugfixDef & {...}`, which could silently drift
+ *  from what buildGeometry actually returns). */
+export type GeometryBugfixBranch = ReturnType<typeof buildGeometry>["bugfixBranches"][number];
 
 // Every constant governing the particle-connect -> impact -> border-seal
 // chain, in one place, so tuning "how snappy does it feel" doesn't mean

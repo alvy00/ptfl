@@ -215,7 +215,28 @@ export const projects: Record<ProjectKey, Project> = {
     demoUrl: "https://asynclangai.vercel.app/",
     codeLinks: [{ label: "View Code", url: "https://github.com/alvy00/LangAI" }],
     accent: "#38bdf8",
-    images: [],
+    images: [
+      {
+        id: "1",
+        src: "/langai/langai-home.png",
+        alt: "AsyncLangAI home page",
+      },
+      {
+        id: "2",
+        src: "/langai/langai-login.png",
+        alt: "AsyncLangAI login page",
+      },
+      {
+        id: "3",
+        src: "/langai/langai-interview.png",
+        alt: "AsyncLangAI interview page",
+      },
+      {
+        id: "4",
+        src: "/langai/langai-create.png",
+        alt: "AsyncLangAI interview creation page",
+      },
+    ],
   },
   careerpilot: {
     key: "careerpilot",
