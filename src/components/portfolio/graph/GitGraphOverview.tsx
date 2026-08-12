@@ -1,8 +1,14 @@
 /* eslint-disable prettier/prettier */
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  motion,
+  AnimatePresence,
+  useReducedMotion,
+  useMotionValue,
+  useSpring,
+} from "framer-motion";
 import { projects, type ProjectKey, type Project } from "@/data/portfolio/projects";
 import { CONTACT_EMAIL } from "@/lib/portfolio/gitGraphData";
 
@@ -27,276 +33,296 @@ const MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
 )}&body=${encodeURIComponent(BODY)}`;
 
 // ---------------------------------------------------------------------------
-// Design language for this view: the rest of the portfolio is framed as a
-// git history (commit graph, "2023 — present"), so the overview leans into
-// that vocabulary rather than introducing a second metaphor. Feature lists
-// read as a changelog/diff ("+" additions, line numbers, a "features
-// shipped" count) instead of a generic icon-card grid — the numbering and
-// diff marks encode real information here (chronological order, count of
-// shipped features) rather than decorating. Motion follows the same
-// single-spring, one-thing-moves-at-a-time discipline as the graph toggle:
-// entrances stagger in one direction, nothing blurs or scales at the same
-// time as it slides.
+// This tab is the general-audience view: recruiters, hiring managers and
+// founders skimming on a phone. It deliberately does NOT borrow the graph
+// tab's vocabulary (commit nodes, diff marks, changelog framing, mono as
+// display type). It reads as an editorial case-study wall — big color-washed
+// covers, one plain sentence per project, technical depth folded away behind
+// an accordion until asked for.
 // ---------------------------------------------------------------------------
 
-const STAGGER_CONTAINER = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.08 } },
+// [DRAFTED COPY] Outcome-first, plain-language one-liners written for a
+// non-technical reader. These override project.description in THIS TAB ONLY —
+// the data layer and the graph tab keep the original technical copy.
+const OUTCOME_COPY: Record<ProjectKey, string> = {
+  auctasync:
+    "A live auction platform where hundreds of people can bid at the same time and everyone sees the same price instantly, with payments handled end to end.",
+  assetverse:
+    "A tool that lets companies stop tracking laptops and equipment in spreadsheets, with a clear record of who has what and when it came back.",
+  asynclangai:
+    "An AI speaking partner that lets people practise English out loud and get honest, useful feedback straight after the conversation.",
+  careerpilot:
+    "Turns any goal — a job, a subject, a certification — into a step-by-step learning plan, with AI voice practice and quizzes to check you actually got it.",
 };
 
-// Shared stiff spring used for layout reflow + chevron rotation so the
-// whole view speaks one motion language instead of mixing spring/duration.
-const LAYOUT_SPRING = { type: "spring" as const, stiffness: 420, damping: 34, mass: 0.7 };
+const ACCENT = "#FF6B4A";
+
+// The page shell sets font-mono globally for the terminal/graph tab; this tab
+// is editorial, so it resets to a humanist sans and demotes mono to labels.
+const SANS =
+  'Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
 
 function useMotionSafe() {
   const reduceMotion = useReducedMotion() ?? false;
   return {
     reduceMotion,
-    fadeUp: reduceMotion
-      ? { hidden: { opacity: 0 }, show: { opacity: 1 } }
-      : { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } },
     spring: reduceMotion
       ? { duration: 0.01 }
       : { type: "spring" as const, stiffness: 380, damping: 32, mass: 0.8 },
-    layoutSpring: reduceMotion ? { duration: 0.01 } : LAYOUT_SPRING,
   };
 }
 
-function StatChip({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-baseline gap-1.5 whitespace-nowrap">
-      <span className="text-sm sm:text-base font-semibold text-white">{value}</span>
-      <span className="text-[11px] font-mono uppercase tracking-wider text-gray-500">{label}</span>
-    </div>
-  );
+function shortNameOf(project: Project) {
+  return project.name.split(" — ")[0];
 }
 
-function FeatureRow({
-  feature,
-  index,
-  accent,
-  stagger,
-}: {
-  feature: Project["features"][number];
-  index: number;
-  accent: string;
-  stagger: boolean;
-}) {
-  const { reduceMotion, layoutSpring } = useMotionSafe();
-  return (
-    <motion.div
-      layout="position"
-      layoutTransition={layoutSpring}
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -10 }}
-      transition={{
-        duration: 0.28,
-        ease: "easeOut",
-        delay: stagger ? Math.min(index, 8) * 0.045 : 0,
-        // Position changes triggered by siblings entering/leaving (list
-        // expand/collapse) get the shared spring so remaining rows glide
-        // into their new slot instead of popping, while opacity/x for this
-        // row's own enter/exit keep the quicker duration-based feel above.
-        layout: reduceMotion ? { duration: 0.01 } : LAYOUT_SPRING,
-      }}
-      className="group relative flex gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3.5 pl-4 hover:bg-white/[0.045] transition-colors"
-    >
-      {/* Diff gutter mark — a real "+" like an added line, colored to the
-          project's own accent so the changelog still reads as belonging
-          to this specific project. */}
-      <span
-        aria-hidden="true"
-        className="absolute left-0 top-0 bottom-0 w-[2px] rounded-full"
-        style={{ background: `${accent}55` }}
-      />
-      <span
-        aria-hidden="true"
-        className="select-none font-mono text-xs leading-6"
-        style={{ color: accent }}
-      >
-        +
-      </span>
-      <div className="min-w-0">
-        <div className="flex items-baseline gap-2">
-          <span className="font-mono text-[10px] text-gray-500">
-            {String(index + 1).padStart(2, "0")}
-          </span>
-          <span className="text-sm font-semibold text-gray-200">{feature.title}</span>
-        </div>
-        <p className="mt-1 text-xs sm:text-sm text-gray-400 leading-relaxed font-light">
-          {feature.detail}
-        </p>
-      </div>
-    </motion.div>
-  );
+// --- Cursor-follow preview chip (desktop pointer devices only) -------------
+
+function usePointerFine() {
+  const [fine, setFine] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(pointer: fine)");
+    setFine(mql.matches);
+    const onChange = (e: MediaQueryListEvent) => setFine(e.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return fine;
 }
 
-function FeatureLog({
-  features,
+function CursorPreview({
+  containerRef,
+  active,
+  label,
   accent,
-  projectKey,
+  reduceMotion,
 }: {
-  features: Project["features"];
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  active: boolean;
+  label: string;
   accent: string;
-  projectKey: string;
+  reduceMotion: boolean;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const { reduceMotion, layoutSpring } = useMotionSafe();
-  const COLLAPSED_COUNT = 4;
-  const visible = expanded ? features : features.slice(0, COLLAPSED_COUNT);
-  const hiddenCount = features.length - COLLAPSED_COUNT;
-  const hasMore = hiddenCount > 0;
-  // Stable id per project so aria-controls points a screen reader straight
-  // at the grid of feature rows the button expands/collapses, instead of
-  // relying on DOM proximity to convey that relationship.
-  const gridId = `feature-log-${projectKey}`;
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  // Reduced motion: snap the chip to the cursor instead of trailing it.
+  const springConfig = reduceMotion
+    ? { stiffness: 2000, damping: 100, mass: 0.1 }
+    : { stiffness: 220, damping: 26, mass: 0.6 };
+  const sx = useSpring(x, springConfig);
+  const sy = useSpring(y, springConfig);
+
+  // Listener is scoped to this panel's hero, not window, so it only runs
+  // while the cursor is actually over this project's cover.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || !active) return;
+    const onMove = (e: MouseEvent) => {
+      const rect = el.getBoundingClientRect();
+      x.set(e.clientX - rect.left);
+      y.set(e.clientY - rect.top);
+    };
+    el.addEventListener("mousemove", onMove);
+    return () => el.removeEventListener("mousemove", onMove);
+  }, [active, containerRef, x, y]);
 
   return (
-    <div className="mt-8 pt-6 border-t border-white/10">
-      <div className="flex items-center justify-between mb-4">
-        <h4 className="text-xs font-mono uppercase tracking-wider text-gray-400">Feature log</h4>
-        <span
-          className="rounded-full border px-2 py-0.5 text-[11px] font-mono"
-          style={{ borderColor: `${accent}33`, color: accent, background: `${accent}0d` }}
+    <AnimatePresence>
+      {active && (
+        <motion.div
+          aria-hidden="true"
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.9 }}
+          transition={{ duration: reduceMotion ? 0.01 : 0.18, ease: "easeOut" }}
+          style={{
+            x: sx,
+            y: sy,
+            background: accent,
+            translateX: "-50%",
+            translateY: "-50%",
+          }}
+          className="pointer-events-none absolute left-0 top-0 z-30 flex h-[90px] w-[140px] items-end rounded-2xl p-3 shadow-2xl"
         >
-          +{features.length} shipped
-        </span>
-      </div>
-
-      <div id={gridId} className="grid gap-3 sm:grid-cols-2">
-        <AnimatePresence initial={false}>
-          {visible.map((f, i) => (
-            <FeatureRow
-              key={f.title}
-              feature={f}
-              index={i}
-              accent={accent}
-              stagger={expanded && i >= COLLAPSED_COUNT}
-            />
-          ))}
-        </AnimatePresence>
-      </div>
-
-      {hasMore && (
-        <motion.button
-          onClick={() => setExpanded((v) => !v)}
-          whileTap={reduceMotion ? undefined : { scale: 0.98 }}
-          aria-expanded={expanded}
-          aria-controls={gridId}
-          className="mt-4 w-full py-2.5 rounded-xl border border-white/10 bg-white/5 text-xs font-mono text-gray-300 hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399]"
-        >
-          <span>
-            {expanded
-              ? "Collapse feature log"
-              : `Show ${hiddenCount} more feature${hiddenCount === 1 ? "" : "s"}`}
-          </span>
-          <motion.span
-            aria-hidden="true"
-            animate={{ rotate: expanded ? 180 : 0 }}
-            transition={layoutSpring}
-            className="inline-block"
-          >
-            ↓
-          </motion.span>
-        </motion.button>
+          <span className="text-[11px] font-semibold tracking-tight text-[#0B0C10]">{label}</span>
+        </motion.div>
       )}
-    </div>
+    </AnimatePresence>
   );
 }
 
-function ProjectCard({
+// --- Accordion: "See what's inside" ----------------------------------------
+
+function CaseStudyAccordion({
   project,
-  index,
   projectKey,
 }: {
   project: Project;
-  index: number;
   projectKey: string;
 }) {
-  const { fadeUp } = useMotionSafe();
-  const shortName = project.name.split(" — ")[0];
-  const tagline = project.name.split(" — ")[1];
+  const [open, setOpen] = useState(false);
+  const { reduceMotion } = useMotionSafe();
+  const panelId = `overview-details-${projectKey}`;
 
   return (
-    <motion.div
-      variants={fadeUp}
-      transition={{ duration: 0.55, ease: "easeOut" }}
-      className="group relative rounded-2xl border p-6 sm:p-8 transition-colors duration-500 hover:border-opacity-60"
-      style={{
-        borderColor: `${project.accent}33`,
-        background: `linear-gradient(135deg, ${project.accent}08 0%, rgba(255,255,255,0.01) 100%)`,
-      }}
-    >
-      <div
-        aria-hidden="true"
-        className="absolute -right-20 -top-20 w-64 h-64 rounded-full blur-3xl opacity-10 pointer-events-none transition-all duration-500 group-hover:opacity-20 group-hover:scale-110"
-        style={{ background: project.accent }}
-      />
+    <div className="mt-8 border-t border-white/[0.08] pt-5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={panelId}
+        className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-xl text-left text-sm font-medium text-[#F5F5F3]/80 transition-colors hover:text-[#F5F5F3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#FF6B4A] sm:w-auto"
+      >
+        <span>See what&rsquo;s inside</span>
+        <motion.span
+          aria-hidden="true"
+          animate={{ rotate: open ? 180 : 0 }}
+          transition={{ duration: reduceMotion ? 0.01 : 0.25, ease: "easeOut" }}
+          className="inline-block text-[#8A8D94]"
+        >
+          ↓
+        </motion.span>
+      </button>
 
-      <div className="relative z-10">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div className="flex items-center gap-3">
-            {/* The numbering here is a real chronological index — projects
-                are sorted by start date — so it carries information about
-                sequence, not just decoration. */}
-            <span className="font-mono text-xs text-gray-500">
-              {String(index + 1).padStart(2, "0")}.
-            </span>
-            <h3
-              className="text-xl sm:text-2xl font-bold tracking-tight"
-              style={{ color: project.accent }}
-            >
-              {shortName}
-            </h3>
-          </div>
-          <span className="px-3 py-1 rounded-full text-[11px] font-mono border border-white/10 bg-white/5 text-gray-400">
-            {project.timeframe.label}
-          </span>
-        </div>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div
+            id={panelId}
+            key="panel"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: reduceMotion ? 0.01 : 0.35, ease: "easeOut" }}
+            className="overflow-hidden"
+          >
+            <div className="pt-6">
+              <h4 className="text-xs font-medium uppercase tracking-[0.14em] text-[#8A8D94]">
+                Built with
+              </h4>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {project.stack.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 font-mono text-[11px] text-[#8A8D94]"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
 
-        {tagline && (
-          <p className="text-sm sm:text-base text-gray-400 mt-1 font-medium">{tagline}</p>
+              <h4 className="mt-7 text-xs font-medium uppercase tracking-[0.14em] text-[#8A8D94]">
+                What&rsquo;s inside
+              </h4>
+              <ul className="mt-3 grid gap-5 sm:grid-cols-2">
+                {project.features.map((f) => (
+                  <li key={f.title}>
+                    <p className="text-sm font-semibold text-[#F5F5F3]">{f.title}</p>
+                    <p className="mt-1 text-sm font-light leading-relaxed text-[#8A8D94]">
+                      {f.detail}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </motion.div>
         )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
-        <p className="mt-4 text-sm sm:text-base text-gray-300 leading-relaxed font-light">
-          {project.description}
-        </p>
+// --- Case-study panel -------------------------------------------------------
 
-        <div className="mt-6 flex flex-wrap gap-2">
-          {project.stack.map((tag) => (
-            <span
-              key={tag}
-              className="rounded-lg border px-2.5 py-1 text-[11px] font-mono transition-all duration-200 hover:scale-105 hover:border-opacity-100"
-              style={{
-                borderColor: `${project.accent}44`,
-                color: project.accent,
-                background: `${project.accent}10`,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = project.accent;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = `${project.accent}44`;
-              }}
-            >
-              {tag}
-            </span>
-          ))}
-        </div>
+function CaseStudyPanel({
+  project,
+  projectKey,
+  index,
+  pointerFine,
+}: {
+  project: Project;
+  projectKey: ProjectKey;
+  index: number;
+  pointerFine: boolean;
+}) {
+  const { reduceMotion } = useMotionSafe();
+  const [hovered, setHovered] = useState(false);
+  const heroRef = useRef<HTMLDivElement | null>(null);
+  const shortName = shortNameOf(project);
+  const tagline = project.name.split(" — ")[1];
+  const accent = project.accent;
+  // Even index -> cover on the left, odd -> cover on the right. Desktop only;
+  // below lg the panel stacks cover-on-top regardless.
+  const coverRight = index % 2 === 1;
 
-        <FeatureLog features={project.features} accent={project.accent} projectKey={projectKey} />
+  return (
+    <article className="overflow-hidden rounded-3xl border border-white/[0.07] bg-[#15171C]">
+      <div className={`flex flex-col lg:flex-row ${coverRight ? "lg:flex-row-reverse" : ""}`}>
+        {/* Color-wash cover */}
+        <motion.div
+          ref={heroRef}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97 }}
+          whileInView={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
+          viewport={{ once: true, margin: "-10%" }}
+          transition={{ duration: reduceMotion ? 0.2 : 0.6, ease: "easeOut" }}
+          onMouseEnter={pointerFine ? () => setHovered(true) : undefined}
+          onMouseLeave={pointerFine ? () => setHovered(false) : undefined}
+          className="relative flex h-[140px] shrink-0 items-end overflow-hidden p-6 sm:h-[220px] sm:p-8 lg:h-auto lg:min-h-[340px] lg:w-[40%]"
+          style={{
+            background: `radial-gradient(120% 120% at ${
+              coverRight ? "80%" : "20%"
+            } 20%, ${accent}${hovered ? "40" : "24"} 0%, ${accent}0f 45%, #15171C 100%)`,
+            transition: "background 400ms ease",
+          }}
+        >
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 opacity-60"
+            style={{
+              background: `linear-gradient(160deg, ${accent}1a 0%, transparent 60%)`,
+            }}
+          />
+          <h3
+            className="relative z-10 w-full break-words font-bold leading-[0.95] tracking-tight text-[#F5F5F3]"
+            style={{ fontSize: "clamp(1.75rem, 3.6vw, 3.25rem)" }}
+          >
+            {shortName}
+          </h3>
+          {pointerFine && (
+            <CursorPreview
+              containerRef={heroRef}
+              active={hovered}
+              label={shortName}
+              accent={accent}
+              reduceMotion={reduceMotion}
+            />
+          )}
+        </motion.div>
 
-        <div className="mt-6 pt-4 flex flex-wrap items-center justify-between gap-4 text-sm font-mono">
-          <div className="flex items-center gap-4">
+        {/* Content */}
+        <div className="flex-1 p-6 sm:p-10">
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-[#8A8D94]">
+            {project.timeframe.label}
+          </p>
+
+          {tagline && (
+            <p className="mt-3 text-lg font-semibold tracking-tight text-[#F5F5F3] sm:text-xl">
+              {tagline}
+            </p>
+          )}
+
+          <p className="mt-3 max-w-[60ch] text-[15px] font-light leading-[1.7] text-[#8A8D94]">
+            {OUTCOME_COPY[projectKey]}
+          </p>
+
+          <div className="mt-7 flex flex-wrap items-center gap-x-6 gap-y-3">
             <a
               href={project.demoUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="group/cta inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all hover:scale-105 shadow-md"
-              style={{ background: project.accent, color: "#000" }}
+              className="group/cta inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-semibold text-[#0B0C10] transition-transform hover:scale-[1.03] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#FF6B4A]"
+              style={{ background: accent }}
             >
-              <span>Live Demo</span>
+              <span>View live demo</span>
               <span className="inline-block transition-transform duration-200 group-hover/cta:translate-x-0.5">
                 →
               </span>
@@ -307,7 +333,7 @@ function ProjectCard({
                 href={c.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="group/link text-gray-400 hover:text-white text-xs underline decoration-dotted transition-colors"
+                className="group/link text-sm text-[#8A8D94] transition-colors hover:text-[#F5F5F3] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#FF6B4A]"
               >
                 <span>{c.label}</span>{" "}
                 <span className="inline-block transition-transform duration-200 group-hover/link:translate-x-0.5">
@@ -316,15 +342,20 @@ function ProjectCard({
               </a>
             ))}
           </div>
+
+          <CaseStudyAccordion project={project} projectKey={projectKey} />
         </div>
       </div>
-    </motion.div>
+    </article>
   );
 }
 
+// --- Root -------------------------------------------------------------------
+
 export function GitGraphOverview() {
   const [activeTab, setActiveTab] = useState<"all" | ProjectKey>("all");
-  const { reduceMotion, fadeUp, spring } = useMotionSafe();
+  const { reduceMotion, spring } = useMotionSafe();
+  const pointerFine = usePointerFine();
 
   const filteredProjects = activeTab === "all" ? PROJECT_ORDER : [activeTab as ProjectKey];
 
@@ -354,9 +385,6 @@ export function GitGraphOverview() {
     }
   };
 
-  // Repo-style stats — quantify the body of work the same way a README's
-  // badge row does, using numbers already implied by the data rather than
-  // invented metrics.
   const stats = useMemo(() => {
     const totalFeatures = PROJECT_ORDER.reduce(
       (sum, key) => sum + projects[key].features.length,
@@ -371,90 +399,56 @@ export function GitGraphOverview() {
   }, []);
 
   return (
-    <div className="flex flex-col gap-12 max-w-5xl mx-auto px-4 sm:px-6 py-8">
-      {/* 1. Executive Summary & Conversion Header */}
-      <motion.div
-        initial={reduceMotion ? undefined : { opacity: 0, y: 16 }}
-        animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-white/[0.01] p-6 sm:p-8 backdrop-blur-xl shadow-2xl"
-      >
-        <div
-          aria-hidden="true"
-          className="absolute -right-24 -top-24 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"
-        />
-        <div
-          aria-hidden="true"
-          className="absolute -left-24 -bottom-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"
-        />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-3 max-w-2xl">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-emerald-400">
-              {/* Live status dot with an expanding radar-ping ring behind it
-                  to pull the eye to availability status on load, without
-                  adding a second competing animated element. */}
-              <span className="relative flex w-2 h-2">
-                <span
-                  aria-hidden="true"
-                  className={`absolute inset-0 rounded-full bg-emerald-400 ${
-                    reduceMotion ? "" : "animate-ping"
-                  } opacity-75`}
-                />
-                <span className="relative w-2 h-2 rounded-full bg-emerald-400" />
-              </span>
-              Open for Opportunities • RUET Chemical Engineering
-              {/* A single terminal cursor blink — the one deliberate flourish
-                  in this header, not repeated anywhere else in the view. */}
-              <motion.span
-                aria-hidden="true"
-                animate={reduceMotion ? undefined : { opacity: [1, 0, 1] }}
-                transition={{ duration: 1.1, repeat: Infinity, ease: "steps(1)" }}
-                className="inline-block w-[6px] h-[12px] bg-emerald-400 -mb-0.5"
-              />
-            </div>
-            <p className="text-base sm:text-lg text-gray-200 leading-relaxed font-light">
-              Self-taught full-stack engineer and applied AI builder. Shipped{" "}
-              <span className="text-white font-medium">4 production systems</span>, real-time
-              architectures, AI voice agents, and B2B SaaS solutions bridging rigorous technical
-              problem-solving with modern web ecosystems.
-            </p>
-            {/* Repo-style stat row — README badge convention, but built from
-                real counts in the project data rather than filler numbers. */}
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 pt-1">
-              <StatChip label="Projects shipped" value={String(stats.projects)} />
-              <StatChip label="Features logged" value={String(stats.features)} />
-              <StatChip label="Technologies used" value={String(stats.stack)} />
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3 shrink-0">
-            <a
-              href={MAILTO}
-              className="inline-flex items-center justify-center px-6 py-3 rounded-xl bg-white text-black font-medium text-sm transition-all duration-300 hover:bg-gray-200 hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399]"
-            >
-              Get in Touch →
-            </a>
-          </div>
+    <div
+      className="font-sans mx-auto flex max-w-6xl flex-col gap-14 px-4 py-10 sm:px-6 sm:py-14"
+      style={{ fontFamily: SANS }}
+    >
+      {/* A. Header */}
+      <header className="flex flex-col gap-7">
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[#8A8D94]">
+          <span aria-hidden="true" className="h-2 w-2 rounded-full bg-emerald-400" />
+          Open for Opportunities • RUET Chemical Engineering
         </div>
-      </motion.div>
 
-      {/* 2. Interactive Filter Bar (View Controls) — a branch-switcher framed
-          the same way as the site's own graph/overview toggle: a sliding
-          highlight pill (shared layoutId families keep the interaction
-          language consistent across the page) rather than a second, unrelated
-          tab affordance. */}
+        <h2
+          className="max-w-[18ch] font-bold leading-[1.05] tracking-[-0.03em] text-[#F5F5F3]"
+          style={{ fontSize: "clamp(2.25rem, 5.5vw, 4rem)" }}
+        >
+          Self-taught engineer shipping real, production software.
+        </h2>
+
+        <p className="max-w-[60ch] text-base font-light leading-[1.7] text-[#8A8D94] sm:text-lg">
+          Four products built end to end — real-time bidding, AI voice practice, and B2B tooling —
+          each shipped, deployed, and used by people outside my own laptop.
+        </p>
+
+        <p className="text-sm text-[#8A8D94]">
+          <span className="text-[#F5F5F3]">{stats.projects}</span> projects shipped ·{" "}
+          <span className="text-[#F5F5F3]">{stats.features}</span> features logged ·{" "}
+          <span className="text-[#F5F5F3]">{stats.stack}</span> technologies used
+        </p>
+
+        <div>
+          <a
+            href={MAILTO}
+            className="inline-flex items-center justify-center rounded-full px-7 py-3.5 text-sm font-semibold text-[#0B0C10] shadow-lg transition-all duration-300 hover:scale-[1.03] hover:shadow-xl active:scale-[0.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#FF6B4A]"
+            style={{ background: ACCENT, boxShadow: `0 10px 30px -12px ${ACCENT}80` }}
+          >
+            Get in touch
+          </a>
+        </div>
+      </header>
+
+      {/* B. Filter bar — same tablist semantics, calmer styling. */}
       <div
-        className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none border-b border-white/10"
+        className="scrollbar-none -mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-1"
         role="tablist"
         aria-label="Filter projects"
         aria-orientation="horizontal"
       >
         {tabKeys.map((key, tabIndex) => {
           const isActive = activeTab === key;
-          const label =
-            key === "all"
-              ? `All Projects (${PROJECT_ORDER.length})`
-              : projects[key].name.split(" — ")[0];
+          const label = key === "all" ? "All projects" : shortNameOf(projects[key]);
           return (
             <button
               key={key}
@@ -466,14 +460,15 @@ export function GitGraphOverview() {
               tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(key)}
               onKeyDown={(e) => handleTabKeyDown(e, tabIndex)}
-              className="relative px-4 py-2 rounded-lg text-xs font-mono whitespace-nowrap transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399]"
-              style={{ color: isActive ? "#fff" : "#9ca3af" }}
+              className="relative min-h-[40px] whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF6B4A]"
+              style={{ color: isActive ? "#0B0C10" : "#8A8D94" }}
             >
               {isActive && (
                 <motion.span
                   layoutId="overview-filter-pill"
                   transition={spring}
-                  className="absolute inset-0 rounded-lg bg-white/10 border border-white/20 shadow-inner"
+                  className="absolute inset-0 rounded-full"
+                  style={{ background: ACCENT }}
                 />
               )}
               <span className="relative">{label}</span>
@@ -482,26 +477,23 @@ export function GitGraphOverview() {
         })}
       </div>
 
-      {/* 3. Project Cards Showcase — cards stagger in together rather than
-          each running its own independent scroll-triggered animation, so a
-          filter change (or first load) reads as one composed reveal instead
-          of N unrelated ones. */}
+      {/* C. Case-study wall */}
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={activeTab}
-          initial="hidden"
-          animate="show"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          variants={STAGGER_CONTAINER}
-          transition={{ duration: 0.25 }}
-          className="flex flex-col gap-8"
+          transition={{ duration: reduceMotion ? 0.01 : 0.25, ease: "easeOut" }}
+          className="flex flex-col gap-10 sm:gap-14"
         >
-          {filteredProjects.map((key) => (
-            <ProjectCard
+          {filteredProjects.map((key, i) => (
+            <CaseStudyPanel
               key={key}
               project={projects[key]}
-              index={PROJECT_ORDER.indexOf(key)}
               projectKey={key}
+              index={i}
+              pointerFine={pointerFine}
             />
           ))}
         </motion.div>

@@ -66,7 +66,7 @@ export function cardHoverVariants(reduce: boolean) {
       y: -4,
       borderColor: "rgba(52, 211, 153, 0.3)",
       boxShadow: "0 10px 30px -10px rgba(52, 211, 153, 0.15)",
-      transition: { type: "spring", stiffness: 400, damping: 25 },
+      transition: { type: "spring" as const, stiffness: 400, damping: 25 },
     },
   };
 }
