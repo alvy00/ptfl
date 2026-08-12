@@ -277,8 +277,8 @@ function CaseStudyPanel({
             }}
           />
           <h3
-            className="relative z-10 font-bold leading-[0.95] tracking-tight text-[#F5F5F3]"
-            style={{ fontSize: "clamp(2.25rem, 5vw, 4rem)" }}
+            className="relative z-10 w-full break-words font-bold leading-[0.95] tracking-tight text-[#F5F5F3]"
+            style={{ fontSize: "clamp(1.75rem, 3.6vw, 3.25rem)" }}
           >
             {shortName}
           </h3>
@@ -394,7 +394,7 @@ export function GitGraphOverview() {
   }, []);
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-14 px-4 py-10 sm:px-6 sm:py-14">
+    <div className="font-sans mx-auto flex max-w-6xl flex-col gap-14 px-4 py-10 sm:px-6 sm:py-14">
       {/* A. Header */}
       <header className="flex flex-col gap-7">
         <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[#8A8D94]">
