@@ -68,6 +68,11 @@
 }
 
 :root {
+  --void: #0b0c10;
+  --surface: #15171c;
+  --ink: #f5f5f3;
+  --ink-muted: #8a8d94;
+  --coral: #ff6b4a;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.129 0.042 264.695);
