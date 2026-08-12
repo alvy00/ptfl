@@ -53,10 +53,14 @@ const LOADER_MESSAGES = [
   "Syncing timeline state...",
 ];
 
-const TAB_TOOLTIPS: Record<ViewName, string> = {
-  graph: "Chronological commit view",
-  overview: "Condensed summary view",
-};
+// One-time discovery nudge: fires when the view-toggle heading scrolls
+// into view (not on hover — nobody hovers there without a reason),
+// pointing at Overview since a visitor who never notices the tabs would
+// otherwise never learn it exists. sessionStorage rather than localStorage —
+// "first time in a session" means it's fair game to remind them again on a
+// later visit. Dismissible early via click, otherwise auto-hides.
+const OVERVIEW_HINT_SESSION_KEY = "portfolio:overview-hint-seen";
+const OVERVIEW_HINT_VISIBLE_MS = 6000;
 
 export function Index() {
   const [isLoading, setIsLoading] = useState(true);
@@ -201,6 +205,37 @@ export function Index() {
   const TOGGLE_SPRING = reduceMotion
     ? { duration: 0.01 }
     : { type: "spring" as const, stiffness: 400, damping: 32, mass: 0.8 };
+
+  // One-time "psst, Overview exists" nudge — see OVERVIEW_HINT_SESSION_KEY above.
+  const [showOverviewHint, setShowOverviewHint] = useState(false);
+  const overviewHintTimeoutRef = useRef<number | undefined>(undefined);
+  const triggerOverviewHint = () => {
+    if (view !== "graph") return; // only meaningful the first time they're looking at the default tab
+    try {
+      if (window.sessionStorage.getItem(OVERVIEW_HINT_SESSION_KEY)) return;
+      window.sessionStorage.setItem(OVERVIEW_HINT_SESSION_KEY, "1");
+    } catch {
+      // if storage is unavailable we still show it once for this render,
+      // just without the "never again this session" guarantee
+    }
+    setShowOverviewHint(true);
+    window.clearTimeout(overviewHintTimeoutRef.current);
+    overviewHintTimeoutRef.current = window.setTimeout(() => {
+      setShowOverviewHint(false);
+    }, OVERVIEW_HINT_VISIBLE_MS);
+  };
+  useEffect(() => () => window.clearTimeout(overviewHintTimeoutRef.current), []);
+
+  // Dismiss early on any click, rather than waiting out the full timeout.
+  useEffect(() => {
+    if (!showOverviewHint) return;
+    const dismiss = () => {
+      window.clearTimeout(overviewHintTimeoutRef.current);
+      setShowOverviewHint(false);
+    };
+    window.addEventListener("click", dismiss);
+    return () => window.removeEventListener("click", dismiss);
+  }, [showOverviewHint]);
 
   // Both panes stay mounted permanently; visibility is driven by `animate`, never by mount state.
   const SLIDE_DISTANCE = 24;
@@ -440,6 +475,7 @@ export function Index() {
                   initial={{ opacity: 0, scale: 1.4, y: 30, x: -20 }}
                   whileInView={{ opacity: 1, scale: 1, y: 0, x: 0 }}
                   viewport={{ once: true, margin: "-50px" }}
+                  onViewportEnter={triggerOverviewHint}
                   transition={{ duration: 0.8, ease: "easeOut" }}
                   style={{ transformOrigin: "top left", willChange: "transform, opacity" }}
                   className="w-max"
@@ -489,7 +525,14 @@ export function Index() {
                           onKeyDown={(e) => handleTabKeyDown(e, mode)}
                           whileTap={reduceMotion ? undefined : { scale: 0.96 }}
                           className="group relative cursor-pointer rounded-full px-3 py-1.5 transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399] focus:outline-none"
-                          style={{ color: view === mode ? "#34d399" : "#8b93a1" }}
+                          style={{
+                            color: view === mode ? "#34d399" : "#8b93a1",
+                            boxShadow:
+                              showOverviewHint && mode === "overview"
+                                ? "0 0 0 2px #34d39966"
+                                : undefined,
+                            transition: "box-shadow 0.3s ease-out",
+                          }}
                         >
                           {view === mode && (
                             <motion.span
@@ -535,13 +578,26 @@ export function Index() {
                             {mode === "graph" ? "Commit Timeline" : "Overview"}
                           </span>
 
-                          {/* Upgrade #2 — tooltip with directional entry + delayed exit */}
-                          <span
-                            role="tooltip"
-                            className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-white/10 bg-[#16181d] px-2.5 py-1 text-[10px] font-mono text-[#e5e7eb] opacity-0 shadow-[0_4px_14px_-4px_rgba(0,0,0,0.5)] transition-[opacity,transform] duration-150 ease-out translate-y-0 delay-100 group-hover:translate-y-0 group-hover:-translate-y-2 group-hover:opacity-100 group-hover:delay-0"
-                          >
-                            {TAB_TOOLTIPS[mode]}
-                          </span>
+                          {/* One-time discovery nudge — only ever rendered on the
+                              Overview tab, and only for the single session-gated
+                              window triggered by the heading scrolling into view. */}
+                          {mode === "overview" && (
+                            <AnimatePresence>
+                              {showOverviewHint && (
+                                <motion.span
+                                  key="overview-hint"
+                                  role="status"
+                                  initial={{ opacity: 0, y: reduceMotion ? 0 : 4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0 }}
+                                  transition={{ duration: 0.3, ease: "easeOut" }}
+                                  className="pointer-events-none absolute -top-9 right-0 whitespace-nowrap rounded-md border border-[#34d399]/30 bg-[#16181d] px-2.5 py-1 text-[10px] font-mono text-[#34d399] shadow-[0_4px_14px_-4px_rgba(0,0,0,0.5)]"
+                                >
+                                  Prefer something simpler? Try Overview →
+                                </motion.span>
+                              )}
+                            </AnimatePresence>
+                          )}
                         </motion.button>
                       ))}
                     </div>

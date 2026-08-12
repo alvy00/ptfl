@@ -1,7 +1,7 @@
 /* eslint-disable prettier/prettier */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { projects, type ProjectKey, type Project } from "@/data/portfolio/projects";
 import { CONTACT_EMAIL } from "@/lib/portfolio/gitGraphData";
@@ -11,13 +11,17 @@ const PROJECT_ORDER: ProjectKey[] = Object.values(projects)
   .map((p) => p.key);
 
 const SUBJECT = "Internship / junior developer role — via portfolio";
+// mailto bodies are interpreted per RFC 2368/6068, which expects CRLF line
+// breaks — a bare "\n" is rendered inconsistently (or collapsed entirely)
+// by some Windows mail clients (notably Outlook). Joining on "\r\n" keeps
+// the body formatted the same way across platforms.
 const BODY = [
   "Hi Alvy,",
   "",
   "I came across your portfolio and wanted to reach out about an internship / junior developer opportunity.",
   "",
   "",
-].join("\n");
+].join("\r\n");
 const MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(
   SUBJECT,
 )}&body=${encodeURIComponent(BODY)}`;
@@ -40,6 +44,10 @@ const STAGGER_CONTAINER = {
   show: { transition: { staggerChildren: 0.08 } },
 };
 
+// Shared stiff spring used for layout reflow + chevron rotation so the
+// whole view speaks one motion language instead of mixing spring/duration.
+const LAYOUT_SPRING = { type: "spring" as const, stiffness: 420, damping: 34, mass: 0.7 };
+
 function useMotionSafe() {
   const reduceMotion = useReducedMotion() ?? false;
   return {
@@ -50,6 +58,7 @@ function useMotionSafe() {
     spring: reduceMotion
       ? { duration: 0.01 }
       : { type: "spring" as const, stiffness: 380, damping: 32, mass: 0.8 },
+    layoutSpring: reduceMotion ? { duration: 0.01 } : LAYOUT_SPRING,
   };
 }
 
@@ -73,9 +82,11 @@ function FeatureRow({
   accent: string;
   stagger: boolean;
 }) {
+  const { reduceMotion, layoutSpring } = useMotionSafe();
   return (
     <motion.div
       layout="position"
+      layoutTransition={layoutSpring}
       initial={{ opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -10 }}
@@ -83,6 +94,11 @@ function FeatureRow({
         duration: 0.28,
         ease: "easeOut",
         delay: stagger ? Math.min(index, 8) * 0.045 : 0,
+        // Position changes triggered by siblings entering/leaving (list
+        // expand/collapse) get the shared spring so remaining rows glide
+        // into their new slot instead of popping, while opacity/x for this
+        // row's own enter/exit keep the quicker duration-based feel above.
+        layout: reduceMotion ? { duration: 0.01 } : LAYOUT_SPRING,
       }}
       className="group relative flex gap-3 rounded-lg border border-white/5 bg-white/[0.02] p-3.5 pl-4 hover:bg-white/[0.045] transition-colors"
     >
@@ -116,13 +132,25 @@ function FeatureRow({
   );
 }
 
-function FeatureLog({ features, accent }: { features: Project["features"]; accent: string }) {
+function FeatureLog({
+  features,
+  accent,
+  projectKey,
+}: {
+  features: Project["features"];
+  accent: string;
+  projectKey: string;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const { reduceMotion } = useMotionSafe();
+  const { reduceMotion, layoutSpring } = useMotionSafe();
   const COLLAPSED_COUNT = 4;
   const visible = expanded ? features : features.slice(0, COLLAPSED_COUNT);
   const hiddenCount = features.length - COLLAPSED_COUNT;
   const hasMore = hiddenCount > 0;
+  // Stable id per project so aria-controls points a screen reader straight
+  // at the grid of feature rows the button expands/collapses, instead of
+  // relying on DOM proximity to convey that relationship.
+  const gridId = `feature-log-${projectKey}`;
 
   return (
     <div className="mt-8 pt-6 border-t border-white/10">
@@ -136,7 +164,7 @@ function FeatureLog({ features, accent }: { features: Project["features"]; accen
         </span>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div id={gridId} className="grid gap-3 sm:grid-cols-2">
         <AnimatePresence initial={false}>
           {visible.map((f, i) => (
             <FeatureRow
@@ -155,6 +183,7 @@ function FeatureLog({ features, accent }: { features: Project["features"]; accen
           onClick={() => setExpanded((v) => !v)}
           whileTap={reduceMotion ? undefined : { scale: 0.98 }}
           aria-expanded={expanded}
+          aria-controls={gridId}
           className="mt-4 w-full py-2.5 rounded-xl border border-white/10 bg-white/5 text-xs font-mono text-gray-300 hover:bg-white/10 hover:text-white transition-colors flex items-center justify-center gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399]"
         >
           <span>
@@ -165,7 +194,7 @@ function FeatureLog({ features, accent }: { features: Project["features"]; accen
           <motion.span
             aria-hidden="true"
             animate={{ rotate: expanded ? 180 : 0 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
+            transition={layoutSpring}
             className="inline-block"
           >
             ↓
@@ -176,7 +205,15 @@ function FeatureLog({ features, accent }: { features: Project["features"]; accen
   );
 }
 
-function ProjectCard({ project, index }: { project: Project; index: number }) {
+function ProjectCard({
+  project,
+  index,
+  projectKey,
+}: {
+  project: Project;
+  index: number;
+  projectKey: string;
+}) {
   const { fadeUp } = useMotionSafe();
   const shortName = project.name.split(" — ")[0];
   const tagline = project.name.split(" — ")[1];
@@ -193,7 +230,7 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
     >
       <div
         aria-hidden="true"
-        className="absolute -right-20 -top-20 w-64 h-64 rounded-full blur-3xl opacity-10 pointer-events-none transition-opacity duration-500 group-hover:opacity-20"
+        className="absolute -right-20 -top-20 w-64 h-64 rounded-full blur-3xl opacity-10 pointer-events-none transition-all duration-500 group-hover:opacity-20 group-hover:scale-110"
         style={{ background: project.accent }}
       />
 
@@ -230,11 +267,17 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
           {project.stack.map((tag) => (
             <span
               key={tag}
-              className="rounded-lg border px-2.5 py-1 text-[11px] font-mono transition-transform duration-200 hover:scale-105"
+              className="rounded-lg border px-2.5 py-1 text-[11px] font-mono transition-all duration-200 hover:scale-105 hover:border-opacity-100"
               style={{
                 borderColor: `${project.accent}44`,
                 color: project.accent,
                 background: `${project.accent}10`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = project.accent;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = `${project.accent}44`;
               }}
             >
               {tag}
@@ -242,7 +285,7 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
           ))}
         </div>
 
-        <FeatureLog features={project.features} accent={project.accent} />
+        <FeatureLog features={project.features} accent={project.accent} projectKey={projectKey} />
 
         <div className="mt-6 pt-4 flex flex-wrap items-center justify-between gap-4 text-sm font-mono">
           <div className="flex items-center gap-4">
@@ -250,11 +293,13 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
               href={project.demoUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all hover:scale-105 shadow-md"
+              className="group/cta inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-medium transition-all hover:scale-105 shadow-md"
               style={{ background: project.accent, color: "#000" }}
             >
               <span>Live Demo</span>
-              <span>→</span>
+              <span className="inline-block transition-transform duration-200 group-hover/cta:translate-x-0.5">
+                →
+              </span>
             </a>
             {project.codeLinks.map((c) => (
               <a
@@ -262,9 +307,12 @@ function ProjectCard({ project, index }: { project: Project; index: number }) {
                 href={c.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white text-xs underline decoration-dotted transition-colors"
+                className="group/link text-gray-400 hover:text-white text-xs underline decoration-dotted transition-colors"
               >
-                {c.label} →
+                <span>{c.label}</span>{" "}
+                <span className="inline-block transition-transform duration-200 group-hover/link:translate-x-0.5">
+                  →
+                </span>
               </a>
             ))}
           </div>
@@ -279,6 +327,32 @@ export function GitGraphOverview() {
   const { reduceMotion, fadeUp, spring } = useMotionSafe();
 
   const filteredProjects = activeTab === "all" ? PROJECT_ORDER : [activeTab as ProjectKey];
+
+  const tabKeys = useMemo(() => ["all", ...PROJECT_ORDER] as const, []);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // Standard roving-tabindex arrow-key handling for a tablist: Left/Right
+  // (and Home/End) move focus between tabs and activate the newly focused
+  // one, matching native tab widget behavior instead of relying on
+  // sequential Tab-key traversal through every project.
+  const handleTabKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+    currentIndex: number,
+  ) => {
+    let nextIndex: number | null = null;
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabKeys.length;
+    else if (event.key === "ArrowLeft")
+      nextIndex = (currentIndex - 1 + tabKeys.length) % tabKeys.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabKeys.length - 1;
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      const nextKey = tabKeys[nextIndex];
+      setActiveTab(nextKey);
+      tabRefs.current[nextKey]?.focus();
+    }
+  };
 
   // Repo-style stats — quantify the body of work the same way a README's
   // badge row does, using numbers already implied by the data rather than
@@ -317,7 +391,18 @@ export function GitGraphOverview() {
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="space-y-3 max-w-2xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              {/* Live status dot with an expanding radar-ping ring behind it
+                  to pull the eye to availability status on load, without
+                  adding a second competing animated element. */}
+              <span className="relative flex w-2 h-2">
+                <span
+                  aria-hidden="true"
+                  className={`absolute inset-0 rounded-full bg-emerald-400 ${
+                    reduceMotion ? "" : "animate-ping"
+                  } opacity-75`}
+                />
+                <span className="relative w-2 h-2 rounded-full bg-emerald-400" />
+              </span>
               Open for Opportunities • RUET Chemical Engineering
               {/* A single terminal cursor blink — the one deliberate flourish
                   in this header, not repeated anywhere else in the view. */}
@@ -362,8 +447,9 @@ export function GitGraphOverview() {
         className="flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none border-b border-white/10"
         role="tablist"
         aria-label="Filter projects"
+        aria-orientation="horizontal"
       >
-        {(["all", ...PROJECT_ORDER] as const).map((key) => {
+        {tabKeys.map((key, tabIndex) => {
           const isActive = activeTab === key;
           const label =
             key === "all"
@@ -372,9 +458,14 @@ export function GitGraphOverview() {
           return (
             <button
               key={key}
+              ref={(el) => {
+                tabRefs.current[key] = el;
+              }}
               role="tab"
               aria-selected={isActive}
+              tabIndex={isActive ? 0 : -1}
               onClick={() => setActiveTab(key)}
+              onKeyDown={(e) => handleTabKeyDown(e, tabIndex)}
               className="relative px-4 py-2 rounded-lg text-xs font-mono whitespace-nowrap transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#34d399]"
               style={{ color: isActive ? "#fff" : "#9ca3af" }}
             >
@@ -406,7 +497,12 @@ export function GitGraphOverview() {
           className="flex flex-col gap-8"
         >
           {filteredProjects.map((key) => (
-            <ProjectCard key={key} project={projects[key]} index={PROJECT_ORDER.indexOf(key)} />
+            <ProjectCard
+              key={key}
+              project={projects[key]}
+              index={PROJECT_ORDER.indexOf(key)}
+              projectKey={key}
+            />
           ))}
         </motion.div>
       </AnimatePresence>
