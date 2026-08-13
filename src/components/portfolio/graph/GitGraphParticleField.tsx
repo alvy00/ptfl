@@ -23,6 +23,51 @@ type IgnitionKind = "feature" | "bugfix";
  * active-border box, with a light that travels along it once per focus-in
  * and fires `onImpact` the moment it lands.
  *
+ * v7 — a round of polish + two fixes, all self-contained to this canvas
+ * (no new cross-component wiring):
+ * - **Spring-damped cursor pull**: ambient particles used to snap straight
+ *   to their pulled position every frame with no lag. Each particle now
+ *   carries its own eased pull offset that chases the instantaneous pull
+ *   target with exponential smoothing, so they visibly lean toward the
+ *   cursor rather than teleporting to match it.
+ * - **White-hot spark core**: the traveling light's head now gets a small
+ *   `#fff` core drawn on top of its branch-color trail, reading as a
+ *   higher-voltage point source instead of a flat colored dot.
+ * - **Canvas-side impact ring**: a one-shot expanding/fading ring drawn at
+ *   the exact impact point the instant `travelT` reaches 1 (real landings
+ *   only, not instant replays — matching GitGraphActiveBorder's own
+ *   real-impact-only flash). This intentionally stays inside the canvas
+ *   rather than reaching into GitGraphActiveBorder's CSS: the border
+ *   already plays its own flash off `onImpact`, and that trip through
+ *   React state is a frame or two of latency the canvas doesn't have to
+ *   pay — the ring gives immediate feedback right where the light lands,
+ *   the border's own flash still layers on top a beat later.
+ * - **Circuit-trace connector**: the connector curve now draws in via
+ *   `lineDashOffset` synced to `travelT` (sampled path length, quadratic
+ *   Bezier), so the line traces itself into existence ahead of the
+ *   traveling light instead of being fully stroked at low alpha from the
+ *   first frame.
+ * - **Comet-taper trail**: trail radii now decay quadratically instead of
+ *   linearly, so the tail pinches down quickly near the end instead of
+ *   stepping down evenly — reads more like a comet, less like a dotted line.
+ * - **Lane-proximity ambient dimming**: when a target is focused, ambient
+ *   particles near its rail brighten slightly and everything else dims,
+ *   instead of every particle rendering at the same flat opacity
+ *   regardless of what's currently active.
+ * - **Idle frame-skip (perf)**: when nothing is focused AND the cursor
+ *   isn't over the graph, `tick` now does real work on every other frame
+ *   only (rest re-schedule and return immediately, leaving the previous
+ *   frame's pixels on screen) — halves clearRect+redraw cost while
+ *   nothing is actually happening, at a frame rate still smooth enough
+ *   for slow ambient drift. Any mouse activity or focus restores full rate.
+ * - **Bugfix — stale left-inset**: `graphLeftInset` was read via
+ *   `getComputedStyle` once, synchronously, inside `resize()`. A web-font
+ *   swap or other late layout shift after that first read could leave it
+ *   stale with nothing to correct it. `resize()` now also re-runs once
+ *   after a double-rAF (letting one full layout/paint commit first) and
+ *   again once `document.fonts.ready` resolves, instead of trusting the
+ *   very first read.
+ *
  * v6 — bugfix parity: this used to only ever receive `branches` (feature),
  * so a focused bugfix never got a connector/particle at all — its border
  * had no impact to gate on and fired straight from focus instead (see
@@ -136,6 +181,10 @@ export function GitGraphParticleField({
 
     const CURSOR_RADIUS = 140; // px — only particles within this react to the cursor
     const MAX_PULL = 18; // px — max displacement at the very center of the radius
+    // How quickly a particle's rendered pull offset chases the
+    // instantaneous cursor-pull target, in roughly 1/seconds — higher is
+    // snappier, lower is laggier/more "magnetic."
+    const PULL_SPRING_RATE = 8;
     // Was 24 — dropped hard per review: this many faint dots reads as
     // generic "AI landing page" ambient chrome, not something specific to
     // a git graph, and it's the one part of this effect with no diegetic
@@ -173,6 +222,11 @@ export function GitGraphParticleField({
       driftRadius: number;
       r: number;
       alpha: number;
+      // Eased cursor-pull offset (v7) — chases the instantaneous pull
+      // target with exponential smoothing instead of snapping to it,
+      // so the "magnetic lean" has real lag/inertia to it.
+      pullX: number;
+      pullY: number;
     };
 
     let particles: Particle[] = [];
@@ -195,6 +249,8 @@ export function GitGraphParticleField({
         driftRadius: 8 + Math.random() * 14,
         r: 0.6 + Math.random() * 1.1,
         alpha: 0.08 + Math.random() * 0.1, // low-opacity by design — fills dead space, doesn't compete with content
+        pullX: 0,
+        pullY: 0,
       }));
     };
 
@@ -214,6 +270,22 @@ export function GitGraphParticleField({
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(container);
+    // Bugfix: a single synchronous getComputedStyle read on mount can race
+    // a not-yet-committed layout (web font swap, late CSS, etc.) and lock
+    // in a stale graphLeftInset with nothing to correct it afterward. A
+    // double-rAF re-measure lets one full layout/paint pass land first;
+    // document.fonts.ready catches the font-swap case specifically.
+    const rafId1 = requestAnimationFrame(() => {
+      requestAnimationFrame(resize);
+    });
+    let fontsCancelled = false;
+    if (typeof document !== "undefined" && "fonts" in document) {
+      document.fonts.ready
+        .then(() => {
+          if (!fontsCancelled) resize();
+        })
+        .catch(() => {});
+    }
 
     const onMouseMove = (e: globalThis.MouseEvent) => {
       const rect = container.getBoundingClientRect();
@@ -273,6 +345,33 @@ export function GitGraphParticleField({
       return { x: activeBoxLeftX(gW), y: (top + bottom) / 2 };
     };
 
+    // Approximate arc length of a quadratic Bezier by sampling — cheap (10
+    // segments) and only needs to be "close enough" to drive a dash-offset
+    // reveal, not exact.
+    const quadLength = (
+      ax: number,
+      ay: number,
+      cx: number,
+      cy: number,
+      bx: number,
+      by: number,
+      segments = 10,
+    ): number => {
+      let len = 0;
+      let prevX = ax;
+      let prevY = ay;
+      for (let i = 1; i <= segments; i++) {
+        const t = i / segments;
+        const oneMinusT = 1 - t;
+        const x = oneMinusT * oneMinusT * ax + 2 * oneMinusT * t * cx + t * t * bx;
+        const y = oneMinusT * oneMinusT * ay + 2 * oneMinusT * t * cy + t * t * by;
+        len += Math.hypot(x - prevX, y - prevY);
+        prevX = x;
+        prevY = y;
+      }
+      return len;
+    };
+
     let raf = 0;
     let running = false;
     let last = performance.now();
@@ -301,6 +400,15 @@ export function GitGraphParticleField({
     const TRAIL_LENGTH = 5;
     let trail: { x: number; y: number }[] = [];
 
+    // One-shot expanding/fading ring at the exact impact point, the
+    // instant a real (non-instant-replay) landing happens — see v7 note
+    // above for why this lives here instead of a cross-component CSS var.
+    let impactRing: { x: number; y: number; t: number; color: string } | null = null;
+    const IMPACT_RING_DURATION = 0.32;
+
+    // Frame-skip counter for the idle throttle below.
+    let idleSkipToggle = 0;
+
     const stop = () => {
       if (running) cancelAnimationFrame(raf);
       running = false;
@@ -313,27 +421,68 @@ export function GitGraphParticleField({
     };
 
     const tick = (now: number) => {
+      // Computed up front: needed both for the idle-throttle decision
+      // below and for lane-proximity ambient dimming, ahead of where it's
+      // otherwise first used further down.
+      const target = findTarget(focusedRef.current);
+
+      // Perf: when nothing is focused and the cursor isn't over the graph,
+      // there's nothing time-sensitive happening — halve the real work
+      // rate instead of doing a full clearRect+redraw every single frame.
+      // Skipped frames just re-schedule and leave the prior frame's pixels
+      // on screen, which is imperceptible at this drift speed. Any mouse
+      // activity or focus restores full rate immediately (checked fresh
+      // every frame, not latched).
+      const idle = !mouse.active && !target;
+      if (idle) {
+        idleSkipToggle = (idleSkipToggle + 1) % 2;
+        if (idleSkipToggle !== 0) {
+          raf = requestAnimationFrame(tick);
+          return;
+        }
+      }
+
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       ctx.clearRect(0, 0, width, height);
+
+      // Lane-proximity bounds for the ambient particles below, when a
+      // target is focused this frame.
+      let activeLane: { trackX: number; top: number; bottom: number } | null = null;
+      if (target) {
+        const { data: laneBranch, kind: laneKind } = target;
+        const ly = layoutRef.current;
+        const trackX =
+          (laneKind === "feature" ? featureTrackX(ly) : bugfixTrackX(ly)) + graphLeftInset;
+        activeLane = { trackX, top: laneBranch.sourceY - 30, bottom: laneBranch.mergeY + 30 };
+      }
 
       // --- ambient particles ---
       for (const p of particles) {
         p.driftPhase += p.driftSpeed * dt;
         const driftX = p.baseX + Math.cos(p.driftPhase) * p.driftRadius;
         const driftY = p.baseY + Math.sin(p.driftPhase * 0.8) * p.driftRadius;
-        const [pullX, pullY] = cursorPull(driftX, driftY);
-        const x = driftX + pullX;
-        const y = driftY + pullY;
+        const [targetPullX, targetPullY] = cursorPull(driftX, driftY);
+        const ease = 1 - Math.exp(-dt * PULL_SPRING_RATE);
+        p.pullX += (targetPullX - p.pullX) * ease;
+        p.pullY += (targetPullY - p.pullY) * ease;
+        const x = driftX + p.pullX;
+        const y = driftY + p.pullY;
+
+        let alphaMul = 1;
+        if (activeLane) {
+          const nearLane =
+            Math.abs(x - activeLane.trackX) < 55 && y >= activeLane.top && y <= activeLane.bottom;
+          alphaMul = nearLane ? 1.7 : 0.5;
+        }
 
         ctx.beginPath();
         ctx.arc(x, y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(180,190,210,${p.alpha})`;
+        ctx.fillStyle = `rgba(180,190,210,${p.alpha * alphaMul})`;
         ctx.fill();
       }
 
       // --- connector line to the focused branch or bugfix only ---
-      const target = findTarget(focusedRef.current);
       if (target) {
         const { data: branch, kind } = target;
 
@@ -359,7 +508,9 @@ export function GitGraphParticleField({
             // sealed with no draw-in animation either. The full
             // connect->travel->seal sequence is a first-impression thing;
             // replaying even just the border's own draw-in on every
-            // re-hover is still motion competing with reading.
+            // re-hover is still motion competing with reading. No impact
+            // ring either, for the same reason — it's a landing effect,
+            // and nothing is landing on a replay.
             travelT = 1;
             travelDone = true;
             pathFade = 0;
@@ -417,14 +568,34 @@ export function GitGraphParticleField({
           }
 
           if (pathFade > 0) {
+            const pathLen = quadLength(
+              anchor.x,
+              anchor.y,
+              ctrlX,
+              ctrlY,
+              targetPoint.x,
+              targetPoint.y,
+            );
             ctx.beginPath();
             ctx.moveTo(anchor.x, anchor.y);
             ctx.quadraticCurveTo(ctrlX, ctrlY, targetPoint.x, targetPoint.y);
             ctx.strokeStyle = branch.color;
-            ctx.globalAlpha = 0.2 * pathFade; // 0.2 matches the old flat `${color}33` opacity
             ctx.lineWidth = 1.25;
+            if (!travelDone) {
+              // Circuit-trace reveal: the line is only "drawn" up to where
+              // the light currently is, via dash-offset synced to
+              // travelT, instead of the whole path being stroked at low
+              // alpha from frame one.
+              ctx.setLineDash([pathLen, pathLen]);
+              ctx.lineDashOffset = pathLen * (1 - travelT);
+            } else {
+              ctx.setLineDash([]);
+              ctx.lineDashOffset = 0;
+            }
+            ctx.globalAlpha = 0.2 * pathFade; // 0.2 matches the old flat `${color}33` opacity
             ctx.stroke();
             ctx.globalAlpha = 1;
+            ctx.setLineDash([]);
           }
 
           // Traveling light — one-shot: advances until it reaches the
@@ -438,19 +609,16 @@ export function GitGraphParticleField({
             if (travelT >= 1) {
               travelDone = true;
               impactedOnce.add(branch.name);
+              impactRing = { x: targetPoint.x, y: targetPoint.y, t: 0, color: branch.color };
               onImpactRef.current?.(branch.name, false);
             }
 
             const t = travelT;
             const oneMinusT = 1 - t;
             const tx =
-              oneMinusT * oneMinusT * anchor.x +
-              2 * oneMinusT * t * ctrlX +
-              t * t * targetPoint.x;
+              oneMinusT * oneMinusT * anchor.x + 2 * oneMinusT * t * ctrlX + t * t * targetPoint.x;
             const ty =
-              oneMinusT * oneMinusT * anchor.y +
-              2 * oneMinusT * t * ctrlY +
-              t * t * targetPoint.y;
+              oneMinusT * oneMinusT * anchor.y + 2 * oneMinusT * t * ctrlY + t * t * targetPoint.y;
             const glowAlpha = Math.sin(t * Math.PI); // fades in/out over the traversal, not a hard pop at the ends
 
             // Trail: remember the last few head positions and draw each at
@@ -461,13 +629,27 @@ export function GitGraphParticleField({
 
             for (let i = trail.length - 1; i >= 0; i--) {
               const p = trail[i];
-              const fade = 1 - i / TRAIL_LENGTH;
+              const fadeLinear = 1 - i / TRAIL_LENGTH;
+              // Quadratic radius decay — pinches down toward the tail
+              // instead of stepping down evenly, closer to a real comet
+              // taper than a dotted line.
+              const radiusFade = fadeLinear * fadeLinear;
               ctx.beginPath();
-              ctx.arc(p.x, p.y, 2 * scale * fade, 0, Math.PI * 2);
+              ctx.arc(p.x, p.y, 2 * scale * radiusFade, 0, Math.PI * 2);
               ctx.fillStyle = branch.color;
-              ctx.globalAlpha = 0.5 * glowAlpha * fade;
+              ctx.globalAlpha = 0.5 * glowAlpha * fadeLinear;
               ctx.fill();
             }
+            ctx.globalAlpha = 1;
+
+            // White-hot core at the current head, drawn on top of the
+            // trail — a bright point source inside the branch-color aura
+            // rather than a flat colored dot.
+            ctx.beginPath();
+            ctx.arc(tx, ty, 1.1 * scale, 0, Math.PI * 2);
+            ctx.fillStyle = "#ffffff";
+            ctx.globalAlpha = 0.85 * glowAlpha;
+            ctx.fill();
             ctx.globalAlpha = 1;
           } else {
             trail = [];
@@ -480,6 +662,25 @@ export function GitGraphParticleField({
         candidateBranch = null;
         trail = [];
         pathFade = 1;
+      }
+
+      // --- one-shot impact ring, drawn regardless of current target so it
+      // still finishes playing even if focus moves on right after landing ---
+      if (impactRing) {
+        impactRing.t += dt / IMPACT_RING_DURATION;
+        if (impactRing.t >= 1) {
+          impactRing = null;
+        } else {
+          const scale = nodeScaleRef.current;
+          const ringR = (4 + impactRing.t * 26) * scale;
+          ctx.beginPath();
+          ctx.arc(impactRing.x, impactRing.y, ringR, 0, Math.PI * 2);
+          ctx.strokeStyle = impactRing.color;
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.9 * (1 - impactRing.t);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
       }
 
       raf = requestAnimationFrame(tick);
@@ -520,6 +721,8 @@ export function GitGraphParticleField({
       stop();
       io.disconnect();
       ro.disconnect();
+      cancelAnimationFrame(rafId1);
+      fontsCancelled = true;
       container.removeEventListener("mousemove", onMouseMove);
       container.removeEventListener("mouseleave", onMouseLeave);
       document.removeEventListener("visibilitychange", onVisibility);
@@ -539,6 +742,8 @@ export function GitGraphParticleField({
       aria-hidden="true"
       className="absolute inset-0 pointer-events-none"
       style={{ willChange: "transform" }}
-    />
+    >
+      Decorative ambient animation — no interactive or informational content.
+    </canvas>
   );
 }
